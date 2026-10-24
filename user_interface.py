@@ -6,6 +6,10 @@ from rna_prop_ui import PropertyPanel
 
 from .tk_utils import select
 from .tk_utils import search as collection_utils
+from .update.update_list import (
+    CountSelectedCollectionCandidates,
+    GetSelectedCollectionListEntry,
+)
 from .i18n import tr
 
 class CAPSULE_UL_Name(UIList):
@@ -60,22 +64,27 @@ class CAPSULE_UL_Object(UIList):
     
     def filter_items(self, context, data, property):
         attributes = getattr(data, property)
-        flags = []
         indices = [i for i in range(len(attributes))]
         objects = [item.object for item in attributes]
-        helper_funcs = bpy.types.UI_UL_list
 
-        # Filtering by name
-        if self.filter_name:
-            flags = helper_funcs.filter_items_by_name(
-                self.filter_name, self.bitflag_filter_item, objects, "name", 
-                reverse = self.use_filter_sort_reverse)
-        if not flags:
-            flags = [self.bitflag_filter_item] * len(attributes)
+        # The panel search field takes priority over the built-in UI List
+        # filter, so entries can be found without opening the list header.
+        pattern = context.scene.CAPScn.object_list_filter
+        if not pattern:
+            pattern = self.filter_name
 
-        # Sorting by alphanumerics
+        flags = [
+            self.bitflag_filter_item
+            if collection_utils.NameMatches(objects[i].name if objects[i] is not None else "", pattern)
+            else 0
+            for i in indices
+        ]
+
         if self.use_filter_sort_alpha:
-            indices = helper_funcs.sort_items_by_name(objects, "name")
+            indices = sorted(
+                indices,
+                key = lambda i: (objects[i].name.lower() if objects[i] is not None else ""),
+                reverse = self.use_filter_sort_reverse)
 
         return flags, indices
 
@@ -121,24 +130,116 @@ class CAPSULE_UL_Collection(UIList):
 
     def filter_items(self, context, data, property):
         attributes = getattr(data, property)
-        flags = []
         indices = [i for i in range(len(attributes))]
         collections = [item.collection for item in attributes]
-        helper_funcs = bpy.types.UI_UL_list
 
-        # Filtering by name
-        if self.filter_name:
-            flags = helper_funcs.filter_items_by_name(
-                self.filter_name, self.bitflag_filter_item, collections, "name", 
-                reverse = self.use_filter_sort_reverse)
-        if not flags:
-            flags = [self.bitflag_filter_item] * len(attributes)
+        pattern = context.scene.CAPScn.collection_list_filter
+        if not pattern:
+            pattern = self.filter_name
 
-        # Sorting by alphanumerics
+        flags = [
+            self.bitflag_filter_item
+            if collection_utils.NameMatches(collections[i].name if collections[i] is not None else "", pattern)
+            else 0
+            for i in indices
+        ]
+
         if self.use_filter_sort_alpha:
-            indices = helper_funcs.sort_items_by_name(collections, "name")
+            indices = sorted(
+                indices,
+                key = lambda i: (collections[i].name.lower() if collections[i] is not None else ""),
+                reverse = self.use_filter_sort_reverse)
 
         return flags, indices
+
+
+class CAPSULE_UL_CollectionPicker(UIList):
+    """
+    The checkbox list used by the batch collection picker.  Entries are
+    indented by their nesting depth so the scene hierarchy stays readable.
+    """
+
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
+
+        row = layout.row(align = True)
+        indent = "    " * item.depth
+
+        if item.collection is None:
+            row.active = False
+            row.label(text = indent + tr("Missing Collection"))
+            return
+
+        row.active = not item.already_added
+        row.prop(item, "add", text = "")
+        row.label(text = indent + item.collection.name, icon = 'NONE')
+
+        if item.already_added:
+            row.label(text = tr("In list"), icon = 'CHECKMARK')
+
+    def filter_items(self, context, data, property):
+        attributes = getattr(data, property)
+        scn = context.scene.CAPScn
+        indices = [i for i in range(len(attributes))]
+
+        flags = [
+            self.bitflag_filter_item
+            if collection_utils.NameMatches(
+                attributes[i].collection.name if attributes[i].collection is not None else "",
+                scn.bulk_filter, scn.bulk_filter_wildcard)
+            else 0
+            for i in indices
+        ]
+
+        return flags, indices
+
+
+class CAPSULE_MT_Add_Collections(Menu):
+    bl_label = "Add Collections"
+
+    def draw(self, context):
+        layout = self.layout
+
+        operation = layout.operator("scene.cap_addcollections",
+            text = tr("Active Collection"), icon = 'COLLECTION_NEW')
+        operation.mode = 'ACTIVE'
+
+        operation = layout.operator("scene.cap_addcollections",
+            text = tr("Active Collection and Children"), icon = 'COLLECTION_NEW')
+        operation.mode = 'ACTIVE_RECURSIVE'
+
+        operation = layout.operator("scene.cap_addcollections",
+            text = tr("Collections of Selected Objects"), icon = 'RESTRICT_SELECT_OFF')
+        operation.mode = 'SELECTED_OBJECTS'
+
+        layout.separator()
+
+        operation = layout.operator("scene.cap_addcollections",
+            text = tr("All Collections With Objects"), icon = 'OUTLINER_COLLECTION')
+        operation.mode = 'ALL_WITH_OBJECTS'
+
+        operation = layout.operator("scene.cap_addcollections",
+            text = tr("All Collections"), icon = 'OUTLINER_COLLECTION')
+        operation.mode = 'ALL'
+
+        layout.separator()
+
+        layout.operator("scene.cap_addcollections_picker",
+            text = tr("Choose Collections..."), icon = 'VIEWZOOM')
+
+
+class CAPSULE_MT_Copy_Collection_Settings(Menu):
+    bl_label = "Copy Settings"
+
+    def draw(self, context):
+        layout = self.layout
+
+        operation = layout.operator("scene.cap_copy_collection_settings",
+            text = tr("Apply to Filtered Entries"), icon = 'COPYDOWN')
+        operation.filtered_only = True
+
+        operation = layout.operator("scene.cap_copy_collection_settings",
+            text = tr("Apply to All Other Entries"), icon = 'COPYDOWN')
+        operation.filtered_only = False
 
 
 class CAPSULE_UL_Path_Default(UIList):
@@ -176,6 +277,74 @@ class CAPSULE_UL_Action(UIList):
         layout.separator()
 
 #//////////////////////// - USER INTERFACE - ////////////////////////
+
+def Draw_CollectionBatchAdd(context, layout):
+    """
+    Draws the batch collection picker below the Export List.
+    """
+
+    scn = context.scene.CAPScn
+    box = layout.box()
+
+    header = box.row(align = True)
+    header.label(text = tr("Add Collections"), icon = 'ADD')
+    header.operator("scene.cap_bulk_close", text = "", icon = 'X')
+
+    search = box.row(align = True)
+    search.prop(scn, "bulk_filter", text = "", icon = 'VIEWZOOM')
+    search.prop(scn, "bulk_filter_wildcard", text = "", toggle = True, icon = 'SORTALPHA')
+
+    buttons = box.row(align = True)
+    buttons.operator("scene.cap_bulk_select", text = tr("Select All")).select = True
+    operation = buttons.operator("scene.cap_bulk_select", text = tr("Select None"))
+    operation.select = False
+    operation = buttons.operator("scene.cap_bulk_select", text = tr("Select Filtered"))
+    operation.select = True
+    operation.filtered_only = True
+    buttons.operator("scene.cap_bulk_refresh", text = "", icon = 'FILE_REFRESH')
+
+    list_row = box.row()
+    list_row.template_list("CAPSULE_UL_CollectionPicker", "collection_picker",
+        scn, "bulk_candidates",
+        scn, "bulk_candidates_index", rows = 8, maxrows = 14)
+
+    selected = CountSelectedCollectionCandidates(scn)
+    box.label(text = tr("Selected: {selected} / {total}",
+        selected = selected, total = len(scn.bulk_candidates)), icon = 'INFO')
+
+    settings = box.column(align = True)
+    settings.prop(scn, "bulk_apply_settings")
+
+    if scn.bulk_apply_settings:
+        selected_entry = GetSelectedCollectionListEntry(context)
+        settings.prop(scn, "bulk_copy_from_selected")
+
+        if scn.bulk_copy_from_selected and selected_entry is not None:
+            settings.label(text = tr("Copying settings from: {name}",
+                name = selected_entry.collection.name), icon = 'COPYDOWN')
+        else:
+            options = settings.column(align = True)
+            options.use_property_split = True
+            options.use_property_decorate = False
+            options.prop(scn, "bulk_origin_point")
+
+            if scn.bulk_origin_point == 'Object':
+                options.prop(scn, "bulk_root_object")
+
+            options.prop(scn, "bulk_collection_children")
+            options.prop(scn, "bulk_location_preset")
+            options.prop(scn, "bulk_export_preset")
+
+            if scn.bulk_copy_from_selected:
+                settings.label(text = tr("No Export List entry selected, using the settings above."), icon = 'INFO')
+
+    settings.prop(scn, "bulk_skip_covered")
+
+    actions = box.row(align = True)
+    actions.operator("scene.cap_addcollections_apply",
+        text = tr("Add Selected ({count})", count = selected), icon = 'ADD')
+    actions.operator("scene.cap_bulk_close", text = tr("Cancel"))
+
 
 class CAPSULE_PT_Header(Panel):
     bl_space_type = "PROPERTIES"
@@ -560,9 +729,30 @@ class CAPSULE_PT_List(Panel):
                                        scn, "collection_list", 
                                        scn, "collection_list_index", rows=3, maxrows=10)
 
-        col_location_options = layout.row(align= True)
+        search_row = layout.row(align = True)
+
+        if list_tab == 1:
+            search_row.prop(scn, "object_list_filter", text = "", icon = 'VIEWZOOM')
+            if scn.object_list_filter:
+                search_row.operator("scene.cap_clear_list_filter",
+                    text = "", icon = 'X').filter_type = 'OBJECT'
+        else:
+            search_row.prop(scn, "collection_list_filter", text = "", icon = 'VIEWZOOM')
+            if scn.collection_list_filter:
+                search_row.operator("scene.cap_clear_list_filter",
+                    text = "", icon = 'X').filter_type = 'COLLECTION'
+
+        col_location_options = layout.row(align = True)
+
+        if list_tab == 2:
+            col_location_options.menu("CAPSULE_MT_Add_Collections", text = "", icon = 'ADD')
+            col_location_options.menu("CAPSULE_MT_Copy_Collection_Settings", text = "", icon = 'COPYDOWN')
+
         col_location_options.operator("scene.cap_clearlist", icon = "X")
         col_location_options.operator("scene.cap_refreshlist", icon = "FILE_REFRESH")
+
+        if list_tab == 2 and scn.bulk_add_active:
+            Draw_CollectionBatchAdd(context, layout)
 
         export_options = layout.column(align = True)
         
@@ -584,9 +774,9 @@ class CAPSULE_PT_List(Panel):
             ob = None
 
             if len(scn.object_list) != 0:
-                if len(scn.object_list) > scn.object_list_index:
-                    entry = scn.object_list[scn.object_list_index]
-                    ob = entry.object
+                index = min(max(scn.object_list_index, 0), len(scn.object_list) - 1)
+                entry = scn.object_list[index]
+                ob = entry.object if entry.object is not None else None
             
             if ob != None:
                 obj = entry.object.CAPObj
@@ -613,9 +803,12 @@ class CAPSULE_PT_List(Panel):
             gr = None
 
             if len(scn.collection_list) > 0:
-                entry = scn.collection_list[scn.collection_list_index]
-                grp = entry.collection.CAPCol
-                gr = entry.collection
+                index = min(max(scn.collection_list_index, 0), len(scn.collection_list) - 1)
+                entry = scn.collection_list[index]
+
+                if entry.collection is not None:
+                    grp = entry.collection.CAPCol
+                    gr = entry.collection
                         
             
             if gr is not None:

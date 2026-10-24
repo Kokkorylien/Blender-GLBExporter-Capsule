@@ -133,6 +133,82 @@ class CollectionListItem(PropertyGroup):
 
 
 
+def GetLocationPresets(scene, context):
+
+    items = [
+        ("0", "None",  "", 0),
+    ]
+
+    preferences = context.preferences
+    addon_prefs = preferences.addons['Capsule'].preferences
+    try:
+        cap_file = bpy.data.objects[addon_prefs.default_datablock].CAPFile
+    except KeyError:
+        return items
+
+    u = 1
+
+    for i,x in enumerate(cap_file.location_presets):
+        items.append((str(i+1), x.name, x.name, i+1))
+
+    return items
+
+def GetExportDefaults(scene, context):
+
+    items = [
+        ("0", "None",  "", 0),
+        ]
+
+    preferences = context.preferences
+    addon_prefs = preferences.addons['Capsule'].preferences
+    try:
+        cap_file = bpy.data.objects[addon_prefs.default_datablock].CAPFile
+    except KeyError:
+        return items
+
+
+    u = 1
+
+    for i,x in enumerate(cap_file.export_presets):
+        items.append((str(i+1), x.name, x.name, i+1))
+
+    return items
+
+
+class CollectionPickItem(PropertyGroup):
+    """
+    A transient entry in the batch collection picker.
+
+    Candidates are rebuilt from the current View Layer whenever the picker is
+    opened and are cleared once the batch has been added, so they only exist for
+    as long as the picker is in use.
+    """
+
+    collection: PointerProperty(
+        type = bpy.types.Collection,
+        name = "Collection",
+        description = "The collection this batch entry represents",
+    )
+
+    depth: IntProperty(
+        name = "Depth",
+        description = "(Internal) Nesting depth, used to indent the collection in the picker",
+        default = 0,
+    )
+
+    add: BoolProperty(
+        name = "Add",
+        description = "Add this collection to the Export List when the batch is applied",
+        default = True,
+    )
+
+    already_added: BoolProperty(
+        name = "Already Added",
+        description = "(Internal) This collection is already in the Export List",
+        default = False,
+    )
+
+
 class CAPSULE_Scene_Preferences(PropertyGroup):
     """
     A random assortment of scene-specific properties with some "weird" toggle stuff.
@@ -175,6 +251,105 @@ class CAPSULE_Scene_Preferences(PropertyGroup):
     # The index of the selected collection list item
     collection_list_index: IntProperty()
 
+    # ////////////
+    # Export List search filters
+
+    object_list_filter: StringProperty(
+        name = "Search Objects",
+        description = "Filter the object Export List by name",
+        default = "",
+    )
+
+    collection_list_filter: StringProperty(
+        name = "Search Collections",
+        description = "Filter the collection Export List by name",
+        default = "",
+    )
+
+    # ////////////
+    # Batch collection add
+
+    bulk_add_active: BoolProperty(
+        name = "Add Collections",
+        description = "Show the batch collection picker below the Export List",
+        default = False,
+    )
+
+    bulk_candidates: CollectionProperty(type = CollectionPickItem)
+    bulk_candidates_index: IntProperty()
+
+    bulk_filter: StringProperty(
+        name = "Search",
+        description = "Filter the collection picker by name",
+        default = "",
+    )
+
+    bulk_filter_wildcard: BoolProperty(
+        name = "Wildcard",
+        description = "Treat the search text as a wildcard pattern using * and ?",
+        default = False,
+    )
+
+    bulk_apply_settings: BoolProperty(
+        name = "Apply Settings",
+        description = "Apply the same export settings to every collection added in this batch",
+        default = True,
+    )
+
+    bulk_copy_from_selected: BoolProperty(
+        name = "Copy Settings From Selected Entry",
+        description = "Copy the export settings of the currently selected Export List entry to every collection added in this batch",
+        default = True,
+    )
+
+    bulk_skip_covered: BoolProperty(
+        name = "Skip Child Collections of Added Parents",
+        description = "Do not add a collection when a parent collection is already in the Export List and exports all of its children",
+        default = False,
+    )
+
+    bulk_origin_point: EnumProperty(
+        name = "Origin Export",
+        description = "Determine the location of the origin point for collections added in this batch",
+        items =  (
+        ('Object', 'Object', "Set the exported origin point to the origin point of a chosen object"),
+        ('Scene', 'Scene', "Keep the exported origin point to the scene's origin point")),
+        default = 'Scene',
+    )
+
+    bulk_root_object: PointerProperty(
+        type = bpy.types.Object,
+        name = "Origin Object",
+        description = "Define the origin point of collections added in this batch",
+    )
+
+    bulk_collection_children: EnumProperty(
+        name = "Child Collections",
+        description = "Set how children of collections added in this batch are included in the export",
+        items =  (
+        ('All', 'All', "Will export the children of this collection as well as every object associated to a child of this collection"),
+        ('None', 'None', "No collections inside this collection will be exported"),
+        ('Down 1', 'One Layer Down', "Will export all children up to one layer down the collection hierarchy"),
+        ('Down 2', 'Two Layers Down', "Will export all children up to two layers down the collection hierarchy"),
+        ('Down 3', 'Three Layers Down', "Will export all children up to three layers down the collection hierarchy"),
+        ('Down 4', 'Four Layers Down', "Will export all children up to four layers down the collection hierarchy"),
+        ('Down 5', 'Five Layers Down', "Will export all children up to five layers down the collection hierarchy")
+        ),
+        default = 'All',
+    )
+
+    bulk_location_preset: EnumProperty(
+        name = "Export Location",
+        description = "Select the file path that collections added in this batch will be exported to",
+        items = GetLocationPresets,
+    )
+
+    bulk_export_preset: EnumProperty(
+        name = "Export Preset",
+        description = "Select the Export Preset used to export collections added in this batch",
+        items = GetExportDefaults,
+    )
+
 
     list_switch: EnumProperty(
         name = "Object Type Switch",
@@ -191,47 +366,6 @@ class CAPSULE_Scene_Preferences(PropertyGroup):
         ('1', 'Objects', 'Display selected objects, and any associated export settings'),
         ('2', 'Collections', 'Display selected collections, and any associated export settings')),
     )
-
-def GetLocationPresets(scene, context):
-
-    items = [
-        ("0", "None",  "", 0),
-    ]
-
-    preferences = context.preferences
-    addon_prefs = preferences.addons['Capsule'].preferences
-    try:
-        cap_file = bpy.data.objects[addon_prefs.default_datablock].CAPFile
-    except KeyError:
-        return items
-
-    u = 1
-
-    for i,x in enumerate(cap_file.location_presets):
-        items.append((str(i+1), x.name, x.name, i+1))
-
-    return items
-
-def GetExportDefaults(scene, context):
-
-    items = [
-        ("0", "None",  "", 0),
-        ]
-
-    preferences = context.preferences
-    addon_prefs = preferences.addons['Capsule'].preferences
-    try:
-        cap_file = bpy.data.objects[addon_prefs.default_datablock].CAPFile
-    except KeyError:
-        return items
-
-
-    u = 1
-
-    for i,x in enumerate(cap_file.export_presets):
-        items.append((str(i+1), x.name, x.name, i+1))
-
-    return items
 
 class CAPSULE_Object_Preferences(PropertyGroup):
     """

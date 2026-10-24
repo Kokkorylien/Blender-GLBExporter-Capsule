@@ -4,6 +4,7 @@
 # ///////////////////////////////////////////////////////////////////
 
 from re import L
+from fnmatch import fnmatchcase
 import bpy
 
 # batfinger you legend
@@ -14,6 +15,61 @@ def TraverseCollectionTree(t):
     yield t
     for child in t.children:
         yield from TraverseCollectionTree(child)
+
+
+def GetCollectionTree(root):
+    """
+    Returns a list of (collection, depth) tuples for every descendant of the
+    given root collection, in hierarchy order.  The root collection itself is
+    excluded, so callers can pass the scene's master collection safely.
+
+    Depth is 0 for the direct children of the root.
+    """
+
+    collections = []
+
+    def Walk(collection, depth):
+        for child in collection.children:
+            collections.append((child, depth))
+            Walk(child, depth + 1)
+
+    Walk(root, 0)
+    return collections
+
+
+def GetCollectionParentMap(root):
+    """
+    Returns a {child: parent} map for every collection below the given root.
+    """
+
+    parents = {}
+    pending = [root]
+
+    while pending:
+        collection = pending.pop()
+        for child in collection.children:
+            parents[child] = collection
+            pending.append(child)
+
+    return parents
+
+
+def NameMatches(name, pattern, wildcard = False):
+    """
+    Case-insensitive name search used by the Export List and the batch
+    collection picker.  An empty pattern matches every name.
+    """
+
+    if not pattern:
+        return True
+
+    if not name:
+        return False
+
+    if wildcard:
+        return fnmatchcase(name.lower(), pattern.lower())
+
+    return pattern.lower() in name.lower()
 
 
 def GetSceneCollections(scene, hasObjects = False):

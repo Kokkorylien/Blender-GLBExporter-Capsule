@@ -10,6 +10,14 @@ from bpy.props import IntProperty, BoolProperty, FloatProperty, EnumProperty, Po
 from .tk_utils import search as search_utils
 from .tk_utils import select as select_utils
 from .tk_utils import object_ops
+from .update.update_list import (
+    ApplyCollectionTemplateToEntries,
+    BulkAddCollections,
+    GetCollectionSettingsTemplate,
+    GetCollectionsForMode,
+    RebuildCollectionCandidates,
+    ResolveBatchCollectionTemplate,
+)
 from .export_formats import CAP_ExportFormat
 from . import export_presets
 from .i18n import tr
@@ -244,6 +252,8 @@ class CAPSULE_OT_Clear_List(Operator):
                 obj.enable_export = False
                 obj.in_export_list = False
             scn.object_list.clear()
+            scn.object_list_index = 0
+            scn.object_list_filter = ""
 
         elif objectTab == 2:
             for collection in search_utils.GetSceneCollections(context.scene, False):
@@ -251,6 +261,8 @@ class CAPSULE_OT_Clear_List(Operator):
                 col.enable_export = False
                 col.in_export_list = False
             scn.collection_list.clear()
+            scn.collection_list_index = 0
+            scn.collection_list_filter = ""
 
         return {'FINISHED'}
 
@@ -274,15 +286,220 @@ class CAPSULE_OT_Refresh_List(Operator):
                     entry.object = obj
                     entry.enable_export = obj.CAPObj.enable_export
 
+            if scn.object_list_index >= len(scn.object_list):
+                scn.object_list_index = max(0, len(scn.object_list) - 1)
 
         elif objectTab == 2:
             scn.collection_list.clear()
             for collection in search_utils.GetSceneCollections(context.scene, False):
-                print(collection)
                 if collection.CAPCol.in_export_list is True:
                         entry = scn.collection_list.add()
                         entry.collection = collection
                         entry.enable_export = collection.CAPCol.enable_export
+
+            if scn.collection_list_index >= len(scn.collection_list):
+                scn.collection_list_index = max(0, len(scn.collection_list) - 1)
+
+        return {'FINISHED'}
+
+
+class CAPSULE_OT_Add_Collections(Operator):
+    """Add collections from the current View Layer to the Export List.  The settings of the selected Export List entry are copied to the new collections by default"""
+
+    bl_idname = "scene.cap_addcollections"
+    bl_label = "Add Collections"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    mode: EnumProperty(
+        name = "Add Mode",
+        description = "Which collections to add to the Export List",
+        items = (
+            ('ACTIVE', 'Active Collection', 'Add the active collection'),
+            ('ACTIVE_RECURSIVE', 'Active Collection and Children', 'Add the active collection and every child collection'),
+            ('SELECTED_OBJECTS', 'Collections of Selected Objects', 'Add every collection used by the selected objects'),
+            ('ALL_WITH_OBJECTS', 'All Collections With Objects', 'Add every collection in the scene that contains objects'),
+            ('ALL', 'All Collections', 'Add every collection in the scene'),
+        ),
+        default = 'ACTIVE',
+    )
+
+    def execute(self, context):
+        collections = GetCollectionsForMode(context, self.mode)
+        template = GetCollectionSettingsTemplate(context)
+
+        added, skipped = BulkAddCollections(context, collections, template = template)
+
+        if added == 0:
+            self.report({'INFO'}, tr(
+                "No new collections were added ({skipped} skipped).",
+                skipped = skipped))
+        else:
+            self.report({'INFO'}, tr(
+                "Added {added} collections to the Export List ({skipped} skipped).",
+                added = added, skipped = skipped))
+
+        return {'FINISHED'}
+
+
+class CAPSULE_OT_Show_Collection_Picker(Operator):
+    """Open the batch collection picker below the Export List, where collections can be searched and picked before they are added"""
+
+    bl_idname = "scene.cap_addcollections_picker"
+    bl_label = "Choose Collections"
+
+    def execute(self, context):
+        scn = context.scene.CAPScn
+        scn.bulk_add_active = True
+        RebuildCollectionCandidates(context)
+        return {'FINISHED'}
+
+
+class CAPSULE_OT_Close_Collection_Picker(Operator):
+    """Close the batch collection picker without adding any collections"""
+
+    bl_idname = "scene.cap_bulk_close"
+    bl_label = "Close Batch Add"
+
+    def execute(self, context):
+        scn = context.scene.CAPScn
+        scn.bulk_add_active = False
+        scn.bulk_candidates.clear()
+        return {'FINISHED'}
+
+
+class CAPSULE_OT_Refresh_Collection_Picker(Operator):
+    """Rebuild the batch collection picker from the current scene"""
+
+    bl_idname = "scene.cap_bulk_refresh"
+    bl_label = "Refresh Collection Picker"
+
+    def execute(self, context):
+        RebuildCollectionCandidates(context)
+        return {'FINISHED'}
+
+
+class CAPSULE_OT_Bulk_Select_Collections(Operator):
+    """Check or uncheck the collections shown in the batch collection picker"""
+
+    bl_idname = "scene.cap_bulk_select"
+    bl_label = "Select Collections"
+
+    select: BoolProperty(
+        name = "Select",
+        description = "Check the matching collections instead of unchecking them",
+        default = True,
+    )
+
+    filtered_only: BoolProperty(
+        name = "Filtered Only",
+        description = "Only change collections that match the picker search",
+        default = False,
+    )
+
+    def execute(self, context):
+        scn = context.scene.CAPScn
+
+        for item in scn.bulk_candidates:
+            if item.collection is None or item.already_added:
+                continue
+
+            if self.filtered_only and not search_utils.NameMatches(
+                    item.collection.name, scn.bulk_filter, scn.bulk_filter_wildcard):
+                continue
+
+            item.add = self.select
+
+        return {'FINISHED'}
+
+
+class CAPSULE_OT_Apply_Collection_Selection(Operator):
+    """Add the checked collections from the batch collection picker to the Export List"""
+
+    bl_idname = "scene.cap_addcollections_apply"
+    bl_label = "Add Selected Collections"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        scn = context.scene.CAPScn
+
+        collections = []
+        for item in scn.bulk_candidates:
+            if item.add and item.collection is not None and not item.already_added:
+                collections.append(item.collection)
+
+        if len(collections) == 0:
+            self.report({'WARNING'}, tr("Select at least one collection to add."))
+            return {'CANCELLED'}
+
+        template = ResolveBatchCollectionTemplate(context)
+
+        added, skipped = BulkAddCollections(
+            context, collections,
+            template = template,
+            skip_covered_children = scn.bulk_skip_covered)
+
+        scn.bulk_add_active = False
+        scn.bulk_candidates.clear()
+
+        if added == 0:
+            self.report({'INFO'}, tr(
+                "No new collections were added ({skipped} skipped).",
+                skipped = skipped))
+        else:
+            self.report({'INFO'}, tr(
+                "Added {added} collections to the Export List ({skipped} skipped).",
+                added = added, skipped = skipped))
+
+        return {'FINISHED'}
+
+
+class CAPSULE_OT_Copy_Collection_Settings(Operator):
+    """Copy the export settings of the selected Export List entry to the other entries in the collection list"""
+
+    bl_idname = "scene.cap_copy_collection_settings"
+    bl_label = "Copy Collection Settings"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    filtered_only: BoolProperty(
+        name = "Filtered Only",
+        description = "Only update collection list entries that match the current search.  When the search is empty, every other entry is updated",
+        default = False,
+    )
+
+    def execute(self, context):
+        updated = ApplyCollectionTemplateToEntries(context, self.filtered_only)
+
+        if updated == 0:
+            self.report({'WARNING'}, tr("No other collection list entries to update."))
+        else:
+            self.report({'INFO'}, tr("Copied settings to {count} entries.", count = updated))
+
+        return {'FINISHED'}
+
+
+class CAPSULE_OT_Clear_List_Filter(Operator):
+    """Clear the search filter of the current Export List"""
+
+    bl_idname = "scene.cap_clear_list_filter"
+    bl_label = "Clear Search"
+
+    filter_type: EnumProperty(
+        name = "Filter Type",
+        description = "Which Export List search filter to clear",
+        items = (
+            ('OBJECT', 'Objects', 'Clear the object Export List search'),
+            ('COLLECTION', 'Collections', 'Clear the collection Export List search'),
+        ),
+        default = 'COLLECTION',
+    )
+
+    def execute(self, context):
+        scn = context.scene.CAPScn
+
+        if self.filter_type == 'OBJECT':
+            scn.object_list_filter = ""
+        else:
+            scn.collection_list_filter = ""
 
         return {'FINISHED'}
 

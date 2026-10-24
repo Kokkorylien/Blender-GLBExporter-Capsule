@@ -37,6 +37,8 @@ As a result, scenes with many enabled Decimate/Data Transfer modifiers export **
 
 * **Export Lists** - Browse and search through all objects and collections marked for export and quickly adjust their settings.
 
+* **Batch Collection Add** - Add whole collection hierarchies to the Export List in one action, pick collections from a searchable list, and copy one list entry's export settings to every newly added collection.
+
 * **Origin Point Export** - Decide where the origin point is in your exports, no need to manually move around your objects before exporting.
 
 * **Export Presets** - Create detailed and reusable export presets for different Export Formats, supporting Alembic, Collada, FBX, GLTF, OBJ, STL and USD/USDZ export formats.
@@ -44,6 +46,26 @@ As a result, scenes with many enabled Decimate/Data Transfer modifiers export **
 * **Automated Folder Structures** - Automatically generate folders with certain criteria to help keep complex export setups organised.
 
 * **Simplified Chinese UI** - Ships with its own translation layer and a complete Simplified Chinese translation.
+
+## Batch adding collections
+
+The collection side of the Export List can be filled in bulk instead of ticking one collection at a time:
+
+1. In **Properties > Scene > Capsule > Export List**, switch to **Collections**.
+2. Select an existing list entry and configure its Origin, Export Location and Export Preset. New collections copy these settings by default.
+3. Use the **+** button next to the list:
+   * **Active Collection** / **Active Collection and Children** - add the collection selected in the Outliner, optionally with its whole hierarchy.
+   * **Collections of Selected Objects** - add every collection used by the selected objects.
+   * **All Collections With Objects** / **All Collections** - add everything in the current View Layer.
+   * **Choose Collections...** - open the batch picker, search by name (substring or `*`/`?` wildcards), tick the collections and press **Add Selected**.
+
+Adding is one undo step. Collections that are already in the list are skipped, so the same action can be repeated safely. Added collections are enabled for export automatically.
+
+To reuse the settings later, select a configured entry and use the copy-settings button next to the list to apply them to the filtered entries or to every other entry.
+
+If no list entry is selected, or **Copy Settings From Selected Entry** is turned off in the picker, the batch settings below it are used instead. **Skip Child Collections of Added Parents** avoids adding a collection whose listed parent already exports all of its children.
+
+The search fields above the list filter Objects and Collections by name; the **X** next to them clears the filter.
 
 ## Installation
 
