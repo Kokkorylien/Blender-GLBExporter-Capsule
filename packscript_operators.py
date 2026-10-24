@@ -7,6 +7,7 @@ from .tk_utils import search as search_utils
 from .tk_utils import select as select_utils
 from .tk_utils import object_ops
 from .export_formats import CAP_ExportFormat
+from .i18n import tr
 
 
 class CAPSULE_OT_PackScript_CreateTest(Operator):
@@ -256,10 +257,10 @@ class CAPSULE_OT_PackScript_Warning(Operator):
     def execute(self, context):
 
         def tutorial_layout(self, context):
-            self.layout.label(text = "Pack Scripts let you run Python scripts found in your Blend file,")
-            self.layout.label(text = "PLEASE make sure the scripts you run are ones you trust.")
+            self.layout.label(text = tr("Pack Scripts let you run Python scripts found in your Blend file,"))
+            self.layout.label(text = tr("PLEASE make sure the scripts you run are ones you trust."))
             self.layout.label(text = "")
-            self.layout.label(text = "Check the Capsule GitHub Wiki for more information on Pack Scripts.")
+            self.layout.label(text = tr("Check the Capsule GitHub Wiki for more information on Pack Scripts."))
 
         # Get the current export data
         bpy.context.window_manager.popup_menu(tutorial_layout, title="Active Export Presets", icon='HELP')

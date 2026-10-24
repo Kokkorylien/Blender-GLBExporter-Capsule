@@ -24,7 +24,8 @@ def SearchModifiers(target, currentList):
                  'SHRINKWRAP', 
                  'SIMPLE_DEFORM', 
                  'WARP', 
-                 'WAVE'}
+                 'WAVE',
+                 'DATA_TRANSFER'}  # 新增: 将数据传递修改器加入处理列表
 
     # This is used to define all modifiers that share the same object location property
     mod_normal_types = {'BOOLEAN', 'SCREW', 'ARMATURE', 'CAST', 'CURVE', 'HOOK', 'LATTICE', 'MESH_DEFORM'}
@@ -33,7 +34,7 @@ def SearchModifiers(target, currentList):
     for modifier in target.modifiers:
         if modifier.type in mod_types:
             #print("Modifier Found...", modifier)
-
+            print("回显：正在核对修改器白名单")
             #Normal Object Types
             if modifier.type in mod_normal_types:
                 if modifier.object is not None:
@@ -44,6 +45,16 @@ def SearchModifiers(target, currentList):
                         #print("Object successfully added.")
                         object_list.append(modifier.object)
                         currentList.append(modifier.object)
+
+            # 新增: 处理 DATA_TRANSFER 修改器
+            elif modifier.type == 'DATA_TRANSFER':
+                if modifier.source_object is not None:  # 数据传递修改器的源对象属性是 `source_object`
+                    print("回显：Object Found In", modifier.name, ":", modifier.source_object.name)
+
+                    if (modifier.source_object in currentList) == False:
+                        print("回显：Object successfully added.")
+                        object_list.append(modifier.source_object)
+                        currentList.append(modifier.source_object)
 
             #Array
             elif modifier.type == 'ARRAY':

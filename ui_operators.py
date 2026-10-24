@@ -12,6 +12,7 @@ from .tk_utils import select as select_utils
 from .tk_utils import object_ops
 from .export_formats import CAP_ExportFormat
 from . import export_presets
+from .i18n import tr
 
 #///////////////// - LOCATION DEFAULTS - ///////////////////////////////////////////
 
@@ -433,7 +434,7 @@ class CAPSULE_OT_Add_Stored_Presets(Operator):
 class CAPSULE_OT_Delete_Presets(Operator):
     """Delete the currently selected Export Preset"""
     bl_idname = "cap.delete_stored_export_preset"
-    bl_label = "Store Preset"
+    bl_label = "Delete Stored Preset"
 
     def execute(self, context):
 
@@ -509,15 +510,16 @@ class CAPSULE_OT_Tutorial_StoredPresets(Operator):
     def execute(self, context):
 
         def tutorial_layout(self, context):
-            self.layout.label(text = "Stored Export Presets are export settings you want to use to store")
-            self.layout.label(text = "and use in different .blend files.")
+            self.layout.label(text = tr("Stored Export Presets are export settings you want to use to store"))
+            self.layout.label(text = tr("and use in different .blend files."))
             self.layout.label(text = "")
-            self.layout.label(text = "If Auto-Save Preferences is enabled, the presets you store will be")
-            self.layout.label(text = "saved when you close the Blender Preferences window.  Otherwise you")
-            self.layout.label(text = "will need to use the 'Save Preferences' button in the bottom-left.")
+            self.layout.label(text = tr("If Auto-Save Preferences is enabled, the presets you store will be"))
+            self.layout.label(text = tr("saved when you close the Blender Preferences window.  Otherwise you"))
+            self.layout.label(text = tr("will need to use the 'Save Preferences' button in the bottom-left."))
+            self.layout.label(text = tr("Stored Export Presets are stored in the add-on preferences, and can be imported and exported as a .json file."))
 
         # Get the current export data
-        bpy.context.window_manager.popup_menu(tutorial_layout, title="Stored Export Presets", icon='HELP')
+        bpy.context.window_manager.popup_menu(tutorial_layout, title=tr("Stored Export Presets"), icon='HELP')
 
 
         return {'FINISHED'}
@@ -530,17 +532,43 @@ class CAPSULE_OT_Tutorial_ActivePresets(Operator):
     def execute(self, context):
 
         def tutorial_layout(self, context):
-            self.layout.label(text = "Active Export Presets are export settings that can be assigned to")
-            self.layout.label(text = "different Objects and Collections in the current Blend file.")
+            self.layout.label(text = tr("Active Export Presets are export settings that can be assigned to"))
+            self.layout.label(text = tr("different Objects and Collections in the current Blend file."))
             self.layout.label(text = "")
-            self.layout.label(text = "They are saved with your .blend file in a special hidden object.")
+            self.layout.label(text = tr("They are saved with your .blend file in a special hidden object."))
             self.layout.label(text = "")
-            self.layout.label(text = "(The object is called '>Capsule Blend File Data<', don't delete it!).")
+            self.layout.label(text = tr("(The object is called '>Capsule Blend File Data<', don't delete it!)."))
 
         # Get the current export data
-        bpy.context.window_manager.popup_menu(tutorial_layout, title="Active Export Presets", icon='HELP')
+        bpy.context.window_manager.popup_menu(tutorial_layout, title=tr("Active Export Presets"), icon='HELP')
 
 
+        return {'FINISHED'}
+
+
+class CAPSULE_OT_Reload_Addon(Operator):
+    """Reload Capsule so language and interface changes are applied immediately"""
+
+    bl_idname = "cap.reload_addon"
+    bl_label = "Reload Add-On"
+
+    def execute(self, context):
+        module = __package__
+
+        # The add-on cannot unregister itself while one of its own operators is
+        # still executing, so the reload is deferred to a timer.
+        def _reload():
+            try:
+                bpy.ops.preferences.addon_disable(module = module)
+                bpy.ops.preferences.addon_enable(module = module)
+            except (RuntimeError, AttributeError) as error:
+                print("Capsule:", tr(
+                    "Could not reload Capsule automatically, please restart Blender. ({error})",
+                    error = error))
+            return None
+
+        bpy.app.timers.register(_reload, first_interval = 0.2)
+        self.report({'INFO'}, tr("Capsule is reloading..."))
         return {'FINISHED'}
 
 

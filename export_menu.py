@@ -6,6 +6,7 @@ from bpy.types import Menu, Operator
 from .tk_utils import search as search_utils
 
 from . import tk_utils
+from .i18n import tr
 
 class CAPSULE_OT_PieWarning(Operator):
     bl_idname = "capsule.pie_warning"
@@ -199,17 +200,17 @@ class CAPSULE_OT_PieObjectMenu(Menu):
         layout = self.layout
         pie = layout.menu_pie()
         # 4 - LEFT
-        enable_export = pie.operator("capsule.toggle_export", text= "Enable Export", icon = "ADD")
+        enable_export = pie.operator("capsule.toggle_export", text= tr("Enable Export"), icon = "ADD")
         enable_export.export_type = "OBJECT"
         enable_export.enabled = True
         # 6 - RIGHT
-        disable_export = pie.operator("capsule.toggle_export", text= "Disable Export", icon = "X")
+        disable_export = pie.operator("capsule.toggle_export", text= tr("Disable Export"), icon = "X")
         disable_export.export_type = "OBJECT"
         disable_export.enabled = False
         # 2 - BOTTOM
-        pie.operator("wm.call_menu_pie", text= "Set Location", icon = "FILE_FOLDER").name = "pie.location_object"
+        pie.operator("wm.call_menu_pie", text= tr("Set Location"), icon = "FILE_FOLDER").name = "pie.location_object"
         # 8 - TOP
-        pie.operator("wm.call_menu_pie", text= "Set Export Preset", icon = "PREFERENCES").name = "pie.export_object"
+        pie.operator("wm.call_menu_pie", text= tr("Set Export Preset"), icon = "PREFERENCES").name = "pie.export_object"
         # 7 - TOP - LEFT
         # 1 - BOTTOM - LEFT
         # 9 - TOP - RIGHT
@@ -234,17 +235,17 @@ class CAPSULE_OT_PieCollectionMenu(Menu):
         layout = self.layout
         pie = layout.menu_pie()
         # 4 - LEFT
-        enable_export = pie.operator("capsule.toggle_export", text= "Enable Export", icon = "ADD")
+        enable_export = pie.operator("capsule.toggle_export", text= tr("Enable Export"), icon = "ADD")
         enable_export.export_type = "COLLECTION"
         enable_export.enabled = True
         # 6 - RIGHT
-        disable_export = pie.operator("capsule.toggle_export", text= "Disable Export", icon = "X")
+        disable_export = pie.operator("capsule.toggle_export", text= tr("Disable Export"), icon = "X")
         disable_export.export_type = "COLLECTION"
         disable_export.enabled = False
         # 2 - BOTTOM
-        pie.operator("wm.call_menu_pie", text= "Set Location", icon = "FILE_FOLDER").name = "pie.location_collection"
+        pie.operator("wm.call_menu_pie", text= tr("Set Location"), icon = "FILE_FOLDER").name = "pie.location_collection"
         # 8 - TOP
-        pie.operator("wm.call_menu_pie", text= "Set Export Preset", icon = "PREFERENCES").name = "pie.export_collection"
+        pie.operator("wm.call_menu_pie", text= tr("Set Export Preset"), icon = "PREFERENCES").name = "pie.export_collection"
         # 7 - TOP - LEFT
         # 1 - BOTTOM - LEFT
         # 9 - TOP - RIGHT
@@ -262,9 +263,11 @@ class CAPSULE_OT_PieExport(Menu):
         layout = self.layout
         pie = layout.menu_pie()
         # 4 - LEFT
-        pie.operator("scene.cap_export", text= "Export All", icon = "EXPORT").set_mode = 'ALL'
+        smart_export = pie.operator("scene.cap_export", text= tr("Modifier Smart Apply Export"), icon = "MODIFIER")
+        smart_export.set_mode = 'ALL'
+        smart_export.smart_modifiers = True
         # 6 - RIGHT
-        pie.operator("scene.cap_export", text= "Export Selected", icon = "EXPORT").set_mode = 'SELECTED_ALL'
+        pie.operator("scene.cap_export", text= tr("Export Selected"), icon = "EXPORT").set_mode = 'SELECTED_ALL'
         # 2 - BOTTOM
         # 8 - TOP
         # 7 - TOP - LEFT
@@ -286,10 +289,10 @@ class CAPSULE_OT_PieMainMenu(Menu):
 
         has_sel = False
         if len(context.selected_objects) > 0:
-            pie.operator("wm.call_menu_pie", text= "Object Settings", icon = "OBJECT_DATA").name = "pie.capsule_object"
+            pie.operator("wm.call_menu_pie", text= tr("Object Settings"), icon = "OBJECT_DATA").name = "pie.capsule_object"
             # 6 - RIGHT
-            pie.operator("wm.call_menu_pie", text= "Collection Settings", icon = "GROUP").name = "pie.capsule_collection"
+            pie.operator("wm.call_menu_pie", text= tr("Collection Settings"), icon = "GROUP").name = "pie.capsule_collection"
             # 2 - BOTTOM
-            pie.operator("wm.call_menu_pie", text= "Export with Capsule", icon = "EXPORT").name = "pie.capsule_export"
+            pie.operator("wm.call_menu_pie", text= tr("Export with Capsule"), icon = "EXPORT").name = "pie.capsule_export"
         else:
-            pie.operator("wm.call_menu_pie", text= "Export with Capsule", icon = "EXPORT").name = "pie.capsule_export"
+            pie.operator("wm.call_menu_pie", text= tr("Export with Capsule"), icon = "EXPORT").name = "pie.capsule_export"

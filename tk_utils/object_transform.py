@@ -122,6 +122,7 @@ def MoveObjectFailsafe(target, context, location):
 
         translation_loc = bpy.context.scene.cursor.location
         previous_mode = bpy.context.active_object.mode
+        
 
         # Calculate the movement difference
         location_diff = copy_location - translation_loc
@@ -192,7 +193,7 @@ def MoveBone(target, bone, context, location):
     #print(translation_loc)
 
     # Calculate the movement difference
-    location_diff = copy_location - cursor.location
+    location_diff = copy_location - cursor_loc
 
     bpy.ops.transform.translate(
         value=location_diff,

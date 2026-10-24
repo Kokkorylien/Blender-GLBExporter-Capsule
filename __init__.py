@@ -18,11 +18,18 @@
 
 
 #This states the metadata for the plugin
+#
+# NOTE: the trailing U+200B (zero width space) in "name" is deliberate.  Blender
+# scans add-ons without executing this file (addon_utils.fake_module_from_file
+# uses ast.literal_eval on bl_info), and the add-on name is then passed through
+# Blender's built-in translation dictionary, which turns "Capsule" into "胶囊".
+# A trailing zero width space makes the dictionary lookup miss, so the name
+# stays readable.  It must be part of the literal to affect the preferences list.
 bl_info = {
-    "name": "Capsule",
+    "name": "Capsule\u200b",
     "author": "Takanu Kyriako",
-    "version": (1, 4, 2),
-    "blender": (4, 1, 0),
+    "version": (1, 4, 1),
+    "blender": (4, 0, 0),
     "location": "3D View > Object Mode > Tools > Capsule",
     "wiki_url": "https://github.com/Takanu/Capsule",
     "description": "An export manager that makes the process of repeat and bulk exports simple.",
@@ -44,6 +51,19 @@ from .export_presets import *
 from .export_menu import *
 from .ui_operators import *
 from .packscript_operators import *
+
+from .i18n import tr
+from . import i18n
+
+from .preset_manager import (
+    CAPSULE_OT_Import_Stored_Presets,
+    CAPSULE_OT_Export_Stored_Presets,
+    CAPSULE_OT_Preview_Stored_Preset,
+    CAPSULE_OT_Export_Preset_Details_To_Console,
+    draw_preset_details,
+    preferences_file_path,
+    selected_stored_preset,
+)
 
 import rna_keymap_ui
 
@@ -144,6 +164,24 @@ class CAP_AddonPreferences(AddonPreferences):
         default = True,
     )
 
+    # Language used by Capsule's own interface.  AUTO follows Blender's
+    # language, an explicit code forces that language.  See i18n.py.
+    ui_language: EnumProperty(
+        name = "Language",
+        description = "The language Capsule displays its interface in.  Changes are applied after the add-on is reloaded",
+        items = i18n.LANGUAGE_ITEMS,
+        default = i18n.AUTO,
+        update = i18n.cache_language_preference,
+    )
+
+    # Shows a read-only summary of the selected Stored Export Preset inside the
+    # add-on preferences, so the settings are no longer guesswork.
+    stored_preset_preview: BoolProperty(
+        name = "Show Settings Preview",
+        description = "Shows a read-only summary of the settings that the selected stored export preset overrides",
+        default = False,
+    )
+
 
     data_missing : BoolProperty(default = False)
     plugin_is_ready : BoolProperty(default = False)
@@ -164,8 +202,8 @@ class CAP_AddonPreferences(AddonPreferences):
         except KeyError:
             layout = self.layout
             col_export = layout.column(align= True)
-            col_export.label(text= "No Capsule for this .blend file has been found,")
-            col_export.label(text= "Please press the button below to generate new data.")
+            col_export.label(text= tr("No Capsule for this .blend file has been found,"))
+            col_export.label(text= tr("Please press the button below to generate new data."))
             col_export.separator()
             col_export.separator()
             col_export.operator("cap.exportdata_create")
@@ -183,7 +221,7 @@ class CAP_AddonPreferences(AddonPreferences):
             savedpresets_box = layout.box()
             savedpresets_title = savedpresets_box.row(align= True)
             savedpresets_title.prop(addon_prefs, "saved_export_presets_dropdown", text= "", icon = 'TRIA_RIGHT', emboss= False)
-            savedpresets_title.label(text= "Stored Export Presets")
+            savedpresets_title.label(text= tr("Stored Export Presets"))
             savedpresets_title.operator("scene.cap_tut_storedpresets", text = "", icon = "HELP")
 
         else:
@@ -191,21 +229,44 @@ class CAP_AddonPreferences(AddonPreferences):
 
             savedpresets_title = savedpresets_box.row(align= True)
             savedpresets_title.prop(addon_prefs, "saved_export_presets_dropdown", text= "", icon = 'TRIA_DOWN', emboss= False)
-            savedpresets_title.label(text= "Stored Export Presets")
+            savedpresets_title.label(text= tr("Stored Export Presets"))
             savedpresets_title.operator("scene.cap_tut_storedpresets", text = "", icon = "HELP")
 
+            # List of stored presets, with per-entry actions on the right.
             savedpresets_items = savedpresets_box.row(align= True)
             savedpresets_list = savedpresets_items.column(align= True)
-            savedpresets_list.template_list("CAPSULE_UL_Saved_Default", "default", addon_prefs, "saved_export_presets", 
+            savedpresets_list.template_list("CAPSULE_UL_Saved_Default", "default", addon_prefs, "saved_export_presets",
                 addon_prefs, "saved_export_presets_index", rows = 3, maxrows = 6)
-            
-            savedpresets_list.separator()
-            savedpresets_list.operator("cap.create_current_preset", text= "Activate Selected", icon = "EXPORT")
 
             savedpresets_listedit = savedpresets_items.column(align= True)
             savedpresets_listedit.operator("cap.delete_stored_export_preset", text= "", icon = "REMOVE")
+            savedpresets_listedit.operator("cap.preview_stored_preset", text= "", icon = "INFO")
+            savedpresets_listedit.operator("cap.print_stored_preset", text= "", icon = "CONSOLE")
 
-            
+            # Actions: copy into the .blend file, and move presets in and out of
+            # Capsule through a portable .json file.
+            savedpresets_actions = savedpresets_box.row(align= True)
+            savedpresets_actions.operator("cap.create_current_preset", text= tr("Activate Selected"), icon = "EXPORT")
+            savedpresets_actions.separator()
+            savedpresets_actions.operator("cap.import_stored_presets", text= tr("Import"), icon = "IMPORT")
+            savedpresets_actions.operator("cap.export_stored_presets", text= tr("Export"), icon = "EXPORT")
+
+            # Read-only preview of what the selected preset actually changes.
+            preview_icon = 'TRIA_DOWN' if addon_prefs.stored_preset_preview else 'TRIA_RIGHT'
+            savedpresets_box.prop(addon_prefs, "stored_preset_preview",
+                text = tr("Show Settings Preview"), icon = preview_icon, emboss = False)
+
+            if addon_prefs.stored_preset_preview:
+                preview_preset = selected_stored_preset(context)
+                if preview_preset is not None:
+                    preview_box = savedpresets_box.box()
+                    draw_preset_details(preview_box, preview_preset, include_defaults = False)
+                else:
+                    savedpresets_box.label(text = tr("No export preset selected."), icon = "INFO")
+
+            # Where the presets live when Blender is closed.
+            storage = savedpresets_box.column(align= True)
+            storage.label(text = tr("Stored in: {path}", path = preferences_file_path()), icon = "FILE_BLEND")
 
         #---------------------------------------------------------
         # Active Export Presets
@@ -215,21 +276,21 @@ class CAP_AddonPreferences(AddonPreferences):
             file_presets_box = layout.box()
             col_saved_title = file_presets_box.row(align= True)
             col_saved_title.prop(addon_prefs, "file_export_presets_dropdown", text= "", icon= 'TRIA_RIGHT', emboss= False)
-            col_saved_title.label(text= "Active Export Presets")
+            col_saved_title.label(text= tr("Active Export Presets"))
             col_saved_title.operator("scene.cap_tut_activepresets", text = "", icon = "HELP")
 
         else:
             file_presets_box = layout.box()
             col_saved_title = file_presets_box.row(align= True)
             col_saved_title.prop(addon_prefs, "file_export_presets_dropdown", text= "", icon= 'TRIA_DOWN', emboss= False)
-            col_saved_title.label(text= "Active Export Presets")
+            col_saved_title.label(text= tr("Active Export Presets"))
             col_saved_title.operator("scene.cap_tut_activepresets", text = "", icon = "HELP")
 
             row_defaults = file_presets_box.row(align= True)
             col_defaultslist = row_defaults.column(align= True)
             col_defaultslist.template_list("CAPSULE_UL_Export_Default", "default", cap_file, "export_presets", cap_file, "export_presets_listindex", rows=3, maxrows=6)
             col_defaultslist.separator()
-            col_defaultslist.operator("cap.store_active_export_preset", text= "Store Selected", icon = "IMPORT")
+            col_defaultslist.operator("cap.store_active_export_preset", text= tr("Store Selected"), icon = "IMPORT")
             col_defaultslist.separator()
 
             col_defaultslist_options = row_defaults.column(align= True)
@@ -246,7 +307,7 @@ class CAP_AddonPreferences(AddonPreferences):
                 general_options_content.separator()
 
                 general_options_heading = general_options_content.row(align= True)
-                general_options_heading.label(text= "General Export Options", icon = "OBJECT_DATA")
+                general_options_heading.label(text= tr("General Export Options"), icon = "OBJECT_DATA")
                 general_options_heading.separator()
                 general_options_content.separator()
 
@@ -279,7 +340,7 @@ class CAP_AddonPreferences(AddonPreferences):
                 # Used a split here to recreate the use_property_split with a custom design.
                 format_type_selector = format_type.row(align= True)
                 format_type_selector_split = format_type_selector.split(factor= 0.4, align= True)
-                format_type_selector_split.label(text= "Export File Type", icon = "FILE")
+                format_type_selector_split.label(text= tr("Export File Type"), icon = "FILE")
                 format_type_selector_split.prop(currentExp, "format_type", text= "")
                 format_type_selector.separator()
 
@@ -315,7 +376,7 @@ class CAP_AddonPreferences(AddonPreferences):
 
             else:
                 preset_unselected = file_presets_box.column(align= True)
-                preset_unselected.label(text= "Select a preset in order to view preset settings.")
+                preset_unselected.label(text= tr("Select a preset in order to view preset settings."))
                 preset_unselected.separator()
 
         #---------------------------------------------------------
@@ -326,11 +387,11 @@ class CAP_AddonPreferences(AddonPreferences):
 
         if addon_prefs.keymap_dropdown is False:
             keymap_menu.prop(addon_prefs, "keymap_dropdown", text= "", icon= 'TRIA_RIGHT', emboss= False)
-            keymap_menu.label(text= "Key Shortcuts")
+            keymap_menu.label(text= tr("Key Shortcuts"))
 
         else:
             keymap_menu.prop(addon_prefs, "keymap_dropdown", text= "", icon= 'TRIA_DOWN', emboss= False)
-            keymap_menu.label(text= "Key Shortcuts")
+            keymap_menu.label(text= tr("Key Shortcuts"))
 
             # Added L/R padding
             keymap_area = keymap_box.row(align= True)
@@ -375,11 +436,11 @@ class CAP_AddonPreferences(AddonPreferences):
 
         if addon_prefs.options_dropdown is False:
             extras_dropdown.prop(addon_prefs, "options_dropdown", text= "", icon= 'TRIA_RIGHT', emboss= False)
-            extras_dropdown.label(text= "Extra Settings")
+            extras_dropdown.label(text= tr("Extra Settings"))
 
         else:
             extras_dropdown.prop(addon_prefs, "options_dropdown", text= "", icon= 'TRIA_DOWN', emboss= False)
-            extras_dropdown.label(text= "Extra Settings")
+            extras_dropdown.label(text= tr("Extra Settings"))
             options_box.separator()
 
             # Added L/R padding
@@ -399,8 +460,15 @@ class CAP_AddonPreferences(AddonPreferences):
             extras_content.separator()
             extras_content.separator()
 
+            # Interface language, provided by Capsule's own translation files.
+            extras_content.prop(addon_prefs, "ui_language")
+            extras_content.label(text= tr("Language changes take effect after reloading the add-on."))
+            extras_content.operator("cap.reload_addon", text = tr("Reload Add-On"), icon = "FILE_REFRESH")
+            extras_content.separator()
+            extras_content.separator()
+
             erase_options = extras_content.column(align= True)
-            erase_options.operator("scene.cap_resetsceneprops", text = "Reset Capsule Scene Data", icon = "TRASH")
+            erase_options.operator("scene.cap_resetsceneprops", text = tr("Reset Capsule Scene Data"), icon = "TRASH")
             erase_options.separator()
             # TODO: Work this out for later!
             # erase_options_split = erase_options.split(factor= 0.4, align= False)
@@ -604,6 +672,13 @@ classes = (
     CAPSULE_OT_PackScript_DestroyTest,
     CAPSULE_OT_PackScript_RetryTest,
 
+    # preset_manager
+    CAPSULE_OT_Import_Stored_Presets,
+    CAPSULE_OT_Export_Stored_Presets,
+    CAPSULE_OT_Preview_Stored_Preset,
+    CAPSULE_OT_Export_Preset_Details_To_Console,
+    CAPSULE_OT_Reload_Addon,
+
     # user_inferface
     CAPSULE_UL_Name,
     CAPSULE_UL_Object,
@@ -625,6 +700,10 @@ def register():
     """
     Registers itself and any extra pointer properties, handlers and keymaps to Blender.
     """
+
+    # Translate every label, tooltip and enum entry before the classes exist in
+    # Blender's RNA.  See i18n.py for how the translation files are loaded.
+    i18n.localize_classes(classes)
 
     # Register classes
     for cls in classes:

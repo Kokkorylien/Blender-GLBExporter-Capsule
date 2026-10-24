@@ -6,7 +6,7 @@ from mathutils import Vector
 from math import pi, radians, degrees
 
 from bpy.types import Operator
-from bpy.props import EnumProperty
+from bpy.props import BoolProperty, EnumProperty
 
 from .tk_utils import search as search_utils
 from .tk_utils import select as select_utils
@@ -15,6 +15,19 @@ from .tk_utils import object_ops
 from .tk_utils import object_transform
 from .tk_utils import paths as path_utils
 from .tk_utils import record as record_utils
+from .tk_utils.smart_modifiers import SmartModifierState
+from .i18n import tr
+
+
+# One operator class handles every export entry.  Smart modifier handling is
+# on by default for every mode; all-active forces it on as well.
+EXPORT_MODE_ITEMS = (
+    ('ALL', "All Active", "Exports everything in the scene"),
+    ('SELECTED_ALL', "Selected", "Exports only selected objects and collections"),
+    ('SELECTED_OBJECTS', "Selected Objects", "Exports only selected object"),
+    ('SELECTED_COLLECTIONS', "Selected Collections", "Exports only selected collection"),
+    ('ACTIVE_LIST', "Active List", "Exports the active list selection"),
+)
 
 
 
@@ -22,20 +35,21 @@ class CAPSULE_OT_Export(Operator):
     """Export objects and collections in the current scene"""
 
     bl_idname = "scene.cap_export"
-    bl_label = "Export All"
+    bl_label = "Export"
 
     # This is important, pay attention :eyes:
     set_mode: EnumProperty(
         name = "Export Mode",
-        items = [
-            ('ALL', "All Active", "Exports everything in the scene"),
-            ('SELECTED_ALL', "Selected", "Exports only selected objects and collections"),
-            ('SELECTED_OBJECTS', "Selected Objects", "Exports only selected object"),
-            ('SELECTED_COLLECTIONS', "Selected Collections", "Exports only selected collection"),
-            ('ACTIVE_LIST', "Active List", "Exports the active list selection")
-            ],
-        default = 'ALL',
+        items = EXPORT_MODE_ITEMS,
+        default = 'SELECTED_ALL',
         description = "Execution mode", 
+        options = {'HIDDEN'},
+    )
+
+    smart_modifiers: BoolProperty(
+        name = "Smart Modifier Export",
+        description = "Only enable the Decimate and Data Transfer modifiers of the export target that is currently being written, instead of leaving every modifier in the scene live.  Enabled for every export by default",
+        default = True,
         options = {'HIDDEN'},
     )
 
@@ -45,6 +59,10 @@ class CAPSULE_OT_Export(Operator):
         addon_prefs = preferences.addons[__package__].preferences
         cap_scn = context.scene.CAPScn
         cap_file = None
+
+        # Smart modifier handling is on by default for every export mode.  An
+        # all-active export forces it on even if a caller disabled the flag.
+        smart_modifiers = bool(self.smart_modifiers) or self.set_mode == 'ALL'
 
         # /////////////////////////////////////////////////
         # FETCH
@@ -128,19 +146,37 @@ class CAPSULE_OT_Export(Operator):
         try:
             cap_file = bpy.data.objects[addon_prefs.default_datablock].CAPFile
         except KeyError:
-            self.report({'WARNING'}, "No Capsule Data for this blend file exists.  Please create it using the Toolshelf or Addon Preferences menu.")
+            self.report({'WARNING'}, tr("No Capsule Data for this blend file exists.  Please create it using the Toolshelf or Addon Preferences menu."))
             return {'FINISHED'}
+
+        # Smart modifier export: switch every expensive modifier off before the
+        # scene is prepared.  Each task restores only the modifiers of the
+        # objects it writes, so the rest of the scene stays cheap.
+        smart_modifier_state = None
+        if smart_modifiers:
+            print(">> SMART MODIFIER EXPORT <<")
+            smart_modifier_state = SmartModifierState(context.scene)
 
         print(">> BUILDING SCENE CONTEXT <<")
 
         # Make a record of the scene before we do anything
-        global_record = record_utils.BuildSceneContext(context)
+        try:
+            global_record = record_utils.BuildSceneContext(context)
 
-        # We need to make a separate definition set for preserving and restoring scene data.
-        result = record_utils.CheckCapsuleErrors(context)
+            # We need to make a separate definition set for preserving and restoring scene data.
+            result = record_utils.CheckCapsuleErrors(context)
+        except Exception:
+            # Never leave the scene with every expensive modifier switched off.
+            if smart_modifier_state is not None:
+                smart_modifier_state.restore_all()
+            raise
 
         if result is not None:
-            record_utils.RestoreSceneContext(context, global_record)
+            try:
+                record_utils.RestoreSceneContext(context, global_record)
+            finally:
+                if smart_modifier_state is not None:
+                    smart_modifier_state.restore_all()
             self.report({'WARNING'}, result)
             return {'FINISHED'}
 
@@ -151,37 +187,56 @@ class CAPSULE_OT_Export(Operator):
         # /////////////////////////////////////////////////
         # EXPORT TASK PROCESSING
 
-        object_export_result = BuildObjectExportTasks(context, cap_file, export_objects, global_record, export_stats)
-        export_stats = object_export_result[1]
-        collection_export_result = BuildCollectionExportTasks(context, cap_file, export_collections, global_record, export_stats)
-        export_stats = collection_export_result[1]
+        try:
+            object_export_result = BuildObjectExportTasks(context, cap_file, export_objects, global_record, export_stats)
+            export_stats = object_export_result[1]
+            collection_export_result = BuildCollectionExportTasks(context, cap_file, export_collections, global_record, export_stats)
+            export_stats = collection_export_result[1]
 
-        export_tasks = object_export_result[0] + collection_export_result[0]
-        export_stats['export_process_time'] = time.time() - export_stats['_last_time']
-        export_stats['_last_time'] = time.time()
+            export_tasks = object_export_result[0] + collection_export_result[0]
+            export_stats['export_process_time'] = time.time() - export_stats['_last_time']
+            export_stats['_last_time'] = time.time()
+        except Exception:
+            if smart_modifier_state is not None:
+                smart_modifier_state.restore_all()
+            raise
 
         # /////////////////////////////////////////////////
         # EXPORT TASKS
 
-        for export_task in export_tasks:
+        try:
+            for export_task in export_tasks:
 
-            GetExportTaskDirectory(context, export_task)
-            PerformExportTask(context, export_task, export_stats)
+                GetExportTaskDirectory(context, export_task)
+                PerformExportTask(context, export_task, export_stats, smart_modifier_state)
+
+        except Exception:
+            # Also restore when an exporter or Pack Script raised: leaving the
+            # whole scene's modifiers disabled would be a very visible bug.
+            if smart_modifier_state is not None:
+                smart_modifier_state.restore_all()
+            raise
 
         # /////////////////////////////////////////////////
         # EXPORT SUMMARY  
 
-        print(">> RESTORING SCENE <<")
-        export_info = GetExportSummary(export_stats)
-        self.report({export_info[0]}, export_info[1])
+        try:
+            print(">> RESTORING SCENE <<")
+            export_info = GetExportSummary(export_stats)
+            self.report({export_info[0]}, export_info[1])
 
-        record_utils.RestoreSceneContext(context, global_record)
+            record_utils.RestoreSceneContext(context, global_record)
 
-        export_stats['scene_restore_time'] += time.time() - export_stats['_last_time']
-        print(export_stats)
+            export_stats['scene_restore_time'] += time.time() - export_stats['_last_time']
+            print(export_stats)
+
+        finally:
+            # Keep the scene restore cheap and still put the modifiers back if
+            # it, or the summary, failed.
+            if smart_modifier_state is not None:
+                smart_modifier_state.restore_all()
 
         return {'FINISHED'}
-
 
 
 def BuildObjectExportTasks(context, cap_file, object_list, global_record, export_stats):
@@ -345,7 +400,20 @@ def GetExportTaskDirectory(context, export_task):
 
 
 
-def PerformExportTask(context, export_task, export_stats):
+def ExportPresetNeedsLiveModifiers(export_preset):
+    """
+    Returns whether the exporter evaluates modifiers for this preset.
+
+    Alembic and USD always write evaluated data and have no Apply Modifiers
+    switch, so they need their targets' modifiers restored even when the
+    preset's generic Apply Modifiers option is off.
+    """
+    if export_preset.format_type in ('Alembic', 'USD'):
+        return True
+    return bool(export_preset.apply_modifiers)
+
+
+def PerformExportTask(context, export_task, export_stats, smart_modifier_state=None):
     """
     Exports a selection of objects into a single file.
     """
@@ -437,28 +505,46 @@ def PerformExportTask(context, export_task, export_stats):
     export_stats['export_pack_script_time'] += time.time() - export_stats['_last_time']
     export_stats['_last_time'] = time.time()
 
-    # based on the export location, send it to the right place
-    if export_preset.format_type == 'FBX':
-        export_preset.data_fbx.export(export_preset, object_file_path)
+    # With smart modifier export, only the modifiers of this task's targets
+    # are live for the exporter call below.  All other modifiers stay off.
+    if smart_modifier_state is not None:
+        if ExportPresetNeedsLiveModifiers(export_preset):
+            # The task targets are the normal case.  Pack Scripts can replace
+            # them, and an exporter always follows the actual selection, so
+            # include both sources to cover every object about to be written.
+            export_targets = list(context.selected_objects)
+            export_targets += list(export_task['targets'])
+            if addon_prefs.use_pack_scripts is True and pack_script is not None:
+                export_targets += list(export_status['target_output'])
+            smart_modifier_state.enable_for_objects(export_targets)
 
-    elif export_preset.format_type == 'OBJ':
-        export_preset.data_obj.export(export_preset, object_file_path)
+    try:
+        # based on the export location, send it to the right place
+        if export_preset.format_type == 'FBX':
+            export_preset.data_fbx.export(export_preset, object_file_path)
 
-    elif export_preset.format_type == 'GLTF':
-        export_preset.data_gltf.export(context, export_preset, 
-            export_task['export_directory'], export_task['export_name'])
+        elif export_preset.format_type == 'OBJ':
+            export_preset.data_obj.export(export_preset, object_file_path)
 
-    elif export_preset.format_type == 'Alembic':
-        export_preset.data_abc.export(context, export_preset, object_file_path)
+        elif export_preset.format_type == 'GLTF':
+            export_preset.data_gltf.export(context, export_preset, 
+                export_task['export_directory'], export_task['export_name'])
 
-    elif export_preset.format_type == 'Collada':
-        export_preset.data_dae.export(export_preset, object_file_path)
-    
-    elif export_preset.format_type == 'STL':
-        export_preset.data_stl.export(context, export_preset, object_file_path)
+        elif export_preset.format_type == 'Alembic':
+            export_preset.data_abc.export(context, export_preset, object_file_path)
 
-    elif export_preset.format_type == 'USD':
-        export_preset.data_usd.export(context, export_preset, object_file_path)
+        elif export_preset.format_type == 'Collada':
+            export_preset.data_dae.export(export_preset, object_file_path)
+        
+        elif export_preset.format_type == 'STL':
+            export_preset.data_stl.export(context, export_preset, object_file_path)
+
+        elif export_preset.format_type == 'USD':
+            export_preset.data_usd.export(context, export_preset, object_file_path)
+
+    finally:
+        if smart_modifier_state is not None:
+            smart_modifier_state.disable_all()
     
     export_stats['export_task_api_time'] += time.time() - export_stats['_last_time']
     export_stats['_last_time'] = time.time()

@@ -6,6 +6,7 @@ from rna_prop_ui import PropertyPanel
 
 from .tk_utils import select
 from .tk_utils import search as collection_utils
+from .i18n import tr
 
 class CAPSULE_UL_Name(UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
@@ -30,7 +31,7 @@ class CAPSULE_UL_Object(UIList):
 
         if no_object:
             # spaces are here to cheat on the layout spacing
-            layout.label(text = "  Deleted Object")
+            layout.label(text = "  " + tr("Deleted Object"))
             # layout.prop(item, "deleted_name", text = "", emboss = False)
             layout.prop(item, "remove", text = "", icon = "X", emboss= False)
             layout.active = False
@@ -90,7 +91,7 @@ class CAPSULE_UL_Collection(UIList):
         # DELETED COLLECTION LIST ITEM
         if item.collection == None:
             # spaces are here to cheat on the layout spacing
-            layout.label(text = "  Deleted Collection")
+            layout.label(text = "  " + tr("Deleted Collection"))
             # layout.prop(item, "deleted_name", text = "", emboss = False)
             layout.prop(item, "remove", text = "", icon = "X", emboss= False)
             layout.active = False
@@ -222,6 +223,9 @@ class CAPSULE_PT_Selection(Panel):
 
 
     def draw_selection(self, context, layout):
+
+        gr = None
+        
         preferences = context.preferences
         addon_prefs = preferences.addons[__package__].preferences
         scn = context.scene.CAPScn
@@ -264,7 +268,7 @@ class CAPSULE_PT_Selection(Panel):
                         selected.append(sel)
 
                     edit_enable_list = True
-                    selection_label = str(object_count) + " objects selected"
+                    selection_label = tr("{count} objects selected", count = object_count)
                 
                 # No dropdown, indicate objects to be edited
                 if addon_prefs.edit_enable_dropdown is False:
@@ -286,7 +290,7 @@ class CAPSULE_PT_Selection(Panel):
                     col_edit_list = col_selection_item_box.column(align= True)
 
                     for item in context.selected_objects:
-                        item_label = "Edit " + item.name
+                        item_label = tr("Edit {name}", name = item.name)
                         col_edit_list.prop(item.CAPObj, 'enable_edit', text=item_label)
 
                 # Only one object selected, no need to show the list.
@@ -323,8 +327,11 @@ class CAPSULE_PT_Selection(Panel):
                     obj_settings.separator()
 
                 export_options = layout.column(align = True)
-                export_options.operator("scene.cap_export", text = "Export All", icon = "EXPORT").set_mode = 'ALL'
-                export_options.operator("scene.cap_export", text = "Export Selected", icon = "EXPORT").set_mode = 'SELECTED_OBJECTS'
+                smart_export = export_options.operator("scene.cap_export",
+                    text = tr("Modifier Smart Apply Export"), icon = "MODIFIER")
+                smart_export.set_mode = 'ALL'
+                smart_export.smart_modifiers = True
+                export_options.operator("scene.cap_export", text = tr("Export Selected"), icon = "EXPORT").set_mode = 'SELECTED_OBJECTS'
 
                 if addon_prefs.use_pack_scripts:
                     export_options.separator()
@@ -337,7 +344,7 @@ class CAPSULE_PT_Selection(Panel):
             else:
                 object_info = layout.column(align= True)
                 object_info.separator()
-                object_info.label(text= "No objects selected.")
+                object_info.label(text= tr("No objects selected."))
 
             layout.separator()
 
@@ -366,7 +373,7 @@ class CAPSULE_PT_Selection(Panel):
 
                 elif len(collections) > 1:
                     edit_enable_list = True
-                    selection_label = str(len(collections)) + " collections selected"
+                    selection_label = tr("{count} collections selected", count = len(collections))
 
                 if context.active_object is not None:
                     if len(context.active_object.users_collection) > 0:
@@ -402,7 +409,7 @@ class CAPSULE_PT_Selection(Panel):
                         col_edit_list = col_selection_item_box.column(align= True)
 
                         for item in collections:
-                            item_label = "Edit " + item.name
+                            item_label = tr("Edit {name}", name = item.name)
                             col_edit_list.prop(item.CAPCol, 'enable_edit', text=item_label)
 
                     # Only one object selected, no need to show the list.
@@ -451,8 +458,11 @@ class CAPSULE_PT_Selection(Panel):
                     group_layout.separator()
 
                 export_options = layout.column(align = True)
-                export_options.operator("scene.cap_export", text = "Export All", icon = "EXPORT").set_mode = 'ALL'
-                export_options.operator("scene.cap_export", text = "Export Selected", icon = "EXPORT").set_mode = 'SELECTED_COLLECTIONS'
+                smart_export = export_options.operator("scene.cap_export",
+                    text = tr("Modifier Smart Apply Export"), icon = "MODIFIER")
+                smart_export.set_mode = 'ALL'
+                smart_export.smart_modifiers = True
+                export_options.operator("scene.cap_export", text = tr("Export Selected"), icon = "EXPORT").set_mode = 'SELECTED_COLLECTIONS'
 
                 if addon_prefs.use_pack_scripts:
                     export_options.separator()
@@ -465,7 +475,7 @@ class CAPSULE_PT_Selection(Panel):
             else:
                 collection_info = layout.column(align= True)
                 collection_info.separator()
-                collection_info.label(text= "No collections selected.")
+                collection_info.label(text= tr("No collections selected."))
 
             layout.separator()
         
@@ -484,14 +494,14 @@ class CAPSULE_PT_Selection(Panel):
 
         pack_status = pack_ui.box()
         if scn.is_pack_script_successful is True:
-            pack_status.label(text = "Pack Script executed successfully!")
-            pack_status.label(text = "Check the results in the Result Collection.")
+            pack_status.label(text = tr("Pack Script executed successfully!"))
+            pack_status.label(text = tr("Check the results in the Result Collection."))
             pack_ui.separator()
             pack_ui.separator()
 
         else:
-            pack_status.label(text = "Pack Script FAILED.")
-            pack_status.label(text = "Retry the test to see the error message again.")
+            pack_status.label(text = tr("Pack Script FAILED."))
+            pack_status.label(text = tr("Retry the test to see the error message again."))
             pack_ui.separator()
             pack_ui.separator()
 
@@ -556,14 +566,13 @@ class CAPSULE_PT_List(Panel):
 
         export_options = layout.column(align = True)
         
-        export_options.operator("scene.cap_export", text = "Export All Active", icon = "EXPORT").set_mode = 'ALL'
-        export_options.operator("scene.cap_export", text = "Export Selected In List", icon = "EXPORT").set_mode = 'ACTIVE_LIST'
+        smart_export = export_options.operator("scene.cap_export",
+            text = tr("Modifier Smart Apply Export"), icon = "MODIFIER")
+        smart_export.set_mode = 'ALL'
+        smart_export.smart_modifiers = True
+        export_options.operator("scene.cap_export", text = tr("Export Selected In List"), icon = "EXPORT").set_mode = 'ACTIVE_LIST'
         export_options.separator()
         export_options.operator("scene.cap_show_preferences", icon = "PREFERENCES")
-        
-        if addon_prefs.use_pack_scripts:
-            export_options.separator()
-            export_options.operator("cap.test_pack_script_listitem")
         
         export_options.separator()
 
@@ -703,8 +712,8 @@ def Draw_CreateCapsuleData(layout):
 
     # UI Prompt for when the .blend Capsule data can no longer be found.
     col_export = layout.column(align= True)
-    col_export.label(text= "No Capsule for this .blend file has been found,")
-    col_export.label(text= "Please press the button below to generate new data.")
+    col_export.label(text= tr("No Capsule for this .blend file has been found,"))
+    col_export.label(text= tr("Please press the button below to generate new data."))
     col_export.separator()
     col_export.separator()
     col_export.operator("cap.exportdata_create")

@@ -17,6 +17,8 @@ from bpy.types import (
 	PropertyGroup,
 )
 
+from ..i18n import tr
+
 class CAP_FormatData_GLTF(PropertyGroup):
 
 	instance_id: IntProperty(default=-1)
@@ -60,56 +62,19 @@ class CAP_FormatData_GLTF(PropertyGroup):
 		default = True
 	)
 
-	export_import_convert_lighting_mode: EnumProperty(
-		name = "Lighting Mode",
-		description = "This options provides backwards compatibility for non-standard render engines. Applies to lights",
-		items = (
-			('SPEC', 'Standard (Default)', 'Physically-based glTF lighting units (cd, lx, nt)'),
-			('COMPAT', 'Unitless', 'Non-physical, unitless lighting. Useful when exposure controls are not available'),
-			),
-		default = 'SPEC',
-	)
-
 	export_cameras: BoolProperty(
-		name = 'Cameras',
-		description = 'Export cameras',
+		name = 'Export Cameras',
+		description = '',
 		default = False
 	)
 
 	export_lights: BoolProperty(
-		name = 'Punctual Lights',
-		description = 'Export directional, point, and spot lights',
+		name = 'Export Punctual Lights',
+		description = '',
 		default = False,
 	)
 
-	# https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Vendor/EXT_mesh_gpu_instancing/README.md
 
-	export_gpu_instances: BoolProperty(
-		name = "GLTF GPU Instances",
-		description = "Enables the GLTF extension 'EXT_mesh_gpu_instancing'.  Use this on an empty and it's children will be used as the transform points for the GPU Instance feature.  See GLTF documentation for more information - https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Vendor/EXT_mesh_gpu_instancing/README.md"
-	)
-
-
-	# TODO: This doesn't work in Blender 4.1, consider adding this in 4.2 depending on the feature-set
-
-	# export_hierarchy_full_collections: BoolProperty(
-	# 	name = 'Include Collections (Collections Only)',
-	# 	description = 'Exports the full scene hierarchy, including any intermediate collections.  WARNING - This will only work with Collection Export as it requires an Active Collection'
-	# )
- 
-	export_hierarchy_flatten_objs: BoolProperty(
-		name = 'Flatten Object Hierarchies',
-		description = 'Will flatten any parent/child relationships between objects on export, apart from skinned meshes.  Useful when working with non-decomposable transformation matrices',
-		default = False,
-	)
-
-	export_gn_mesh: BoolProperty(
-		name = 'Geometry Node Instances (Experimental)',
-		description = 'Export Geometry Node instance meshes',
-		default = False,
-	)
-
-	
 	# /////////////////////////////////
 	# MESH DATA
 
@@ -128,14 +93,9 @@ class CAP_FormatData_GLTF(PropertyGroup):
 	export_tangents: BoolProperty(
 		name = 'Export Tangents',
 		description = 'Export vertex tangents with meshes',
-		default = False
+		default = True
 	)
 
-	export_attributes: BoolProperty(
-		name = 'Export Marked Attributes',
-		description = 'Exports attributes (including Color Attributes?).  Their name MUST start with an underscore to be exported',
-		default = False
-	)
 	
 	use_mesh_edges: BoolProperty(
 		name = 'Include Loose Edges',
@@ -149,17 +109,11 @@ class CAP_FormatData_GLTF(PropertyGroup):
 		default = False
 	)
 
-	# https://github.com/KhronosGroup/glTF-Tutorials/blob/main/gltfTutorial/gltfTutorial_005_BuffersBufferViewsAccessors.md
-	
-
-	export_shared_accessors: BoolProperty(
-		name = 'Use Shared Accessors',
-		description = "If enabled, primitive shapes will share the same data in a GLTF file in order to save space",
-		default = False
+	export_colors: BoolProperty(
+		name = 'Export Vertex Colors',
+		description = 'Export vertex colors with meshes',
+		default = True
 	)
-
-
-
 
 	export_materials: EnumProperty(
 		name = 'Export Materials',
@@ -173,14 +127,12 @@ class CAP_FormatData_GLTF(PropertyGroup):
 
 	export_image_format: EnumProperty(
 		name = 'Export Image Format',
-		description = "Decides how images associated with the 3D object are exported.",
+		description = 'Decides how images associated with the 3D object are exported',
 		items = (
-			('AUTO', 'Automatic (Default)', 'Ensures that PNG, JPEG and WebP image files will retain their file formats when exported.  If any other image file format is used it will be converted to PNG'),
-			('JPEG', 'JPEG', 'Encodes and saves target images as JPEG files unless the image has alpha, which are instead saved as a PNG.  Can result in a loss of quality'),
-			('WEBP', 'WebP', "Encodes and saves target images as WebP files (no fallback is used, all images will be WebP.  WARNING: Most target apps will not accept WebP files"),
-			('NONE', 'None', "Don't export images"),
+			('AUTO', 'Automatic (Default)', 'Ensures that PNG and JPEG image files will retain their file formats.  If any other image file format is used it will be converted to PNG'),
+			('JPEG', 'JPEG', 'Encodes and saves all images as JPEG files unless the image has alpha, which are instead saved as a PNG.  Can result in a loss of quality'),
+			('NONE', 'None', "Don't export images")
 			),
-		default = 'AUTO',
 	)
 
 	export_texture_dir: StringProperty(
@@ -189,11 +141,10 @@ class CAP_FormatData_GLTF(PropertyGroup):
 		default = "",
 	)
 
-	export_image_quality: IntProperty(
-		name = "Compression",
-		description = "Sets the compression quality of exported JPEG and WebP files (when used for texture exports)",
+	export_jpeg_quality: IntProperty(
+		name = "JPEG Quality",
+		description = "Sets the quality of the exported JPEG (when used for texture exports)",
 		default = 75,
-		subtype = 'PERCENTAGE',
 		min = 0,
 		max = 100,
 	)
@@ -205,25 +156,34 @@ class CAP_FormatData_GLTF(PropertyGroup):
 		default = False,
 	)
 
-	export_image_webp_fallback: BoolProperty(
-		name = 'Create PNG Fallback for WebP',
-		description = "For all WebP images, a PNG image will be created and included as a fallback.  WARNING: Even with a fallback, target apps can still fail to import a GLTF file with WebP images",
-		default = True,
-	)
+	# export_displacement: BoolProperty(
+	# 	name = 'Export Displacement (Experimental)',
+	# 	description = 'Export displacement textures. Uses an incomplete “KHR_materials_displacement” glTF extension, use at your own peril!',
+	# 	default = False
+	# )
 
 
 	# /////////////////////////////////
 	# ANIMATION
- 
-	export_animation_mode: EnumProperty(
-		name = 'Animation Mode',
-		description = 'Decides how animations are exported',
-		items = (
-			('ACTIONS', 'All Actions (Default)', 'Export all actions (active actions and on NLA tracks) as separate animations'),
-			('ACTIVE_ACTIONS', 'Merged Active Actions', 'Merge all currently assigned actions into one GLTF animation'),
-			('NLA_TRACKS', 'NLA Tracks', "Export individual NLA Tracks as separate animations"),
-			('SCENE', 'Scene Data', "Export the 'baked' scene animation data as a single GLTF animation"),
-			),
+
+	export_current_frame: BoolProperty(
+		name = 'Use Current Frame',
+		description = 'Exports the scene in the current given animation frame',
+		default = False
+	)
+
+
+	export_frame_range: BoolProperty(
+		name = 'Limit to Playback Range',
+		description = 'Limits the range of animation exported to the selected playback range',
+		default = True
+	)
+
+	
+	export_nla_strips: BoolProperty(
+		name = 'Export Animations by NLA Track',
+		description = """When enabled, multiple GLTF animations will be exported.  GLTF animations will be created based on animation actions pushed onto NLA tracks that share the same name.  When disabled, all currently assigned actions will be merged to become one GLTF animation""",
+		default = True
 	)
 
 	export_nla_strips_merged_animation_name: StringProperty(
@@ -232,82 +192,17 @@ class CAP_FormatData_GLTF(PropertyGroup):
 		default = "Merged Animation",
 	)
 
-	export_bake_animation: BoolProperty(
-		name = 'Force Export Object Actions',
-		description = '*groaning noises*',
-		default = False,
-	)
-
-	
-
-
-
-	export_current_frame: BoolProperty(
-		name = 'Use Current Frame',
-		description = 'Exports the scene in the current given animation frame',
-		default = False
-	)
-
 	export_anim_single_armature: BoolProperty(
 		name = 'Export All Armature Actions',
 		description = 'Export all actions, bound to a single armature. WARNING: Does not support exports including multiple armatures, assign armatures as separate exports before using this option',
 		default = False,
 	)
 
-	export_frame_range: BoolProperty(
-		name = 'Limit to Playback Range',
-		description = 'Limits the range of animation exported to the selected playback range',
-		default = True,
-	)
-
-	export_reset_pose_bones: BoolProperty(
-		name = "Always Reset Pose Bones",
-		description = "Always reset Pose Bones between each action exported. This is needed when some Bones are not keyed on specific animations",
-		default = True,
-	)
-
-	export_morph_reset_sk_data: BoolProperty(
-		name = "Always Reset Shape Keys",
-		description = "Always reset Shape Keys between each action exported. This is needed when some Shape Key channels are not keyed on specific animations",
-		default = True,
-	)
-
-	export_anim_slide_to_zero: BoolProperty(
-		name = "Set Animation Start to 0",
-		description = "Ensures all exportable animations will start at 0.0 seconds.  Important for looping animations",
-		default = False,
-	)
-
-	export_negative_frame: EnumProperty(
-		name = "Negative Frame Handling",
-		description = "Decide what to do for any exportable animation frames that start before 0",
-		items = (
-			('SLIDE', 'Slide (Default)', 'Slide the animation to start at frame 0'),
-			('CROP', 'Crop', 'Remove any animation frames that start before 0'),
-			),
-		default = 'SLIDE',
-	)
-
-
 	export_optimize_animation_size: BoolProperty(
 		name = 'Optimize Animation Size',
 		description = 'Reduces exported filesize by removing duplicate keyframes.  WARNING - Can cause problems with stepped animation',
 		default = True
 	)
-	
-	# TODO: Find a better explanation for this
-	export_optimize_animation_keep_anim_armature: BoolProperty(
-		name = 'Always Keep Channels for Bones',
-		description = 'Ensures that channels for bones are exported even without keyframes or movement',
-		default = True
-	)
-
-	export_optimize_animation_keep_anim_object : BoolProperty(
-		name = 'Always Keep Channels for Objects',
-		description = 'Ensures that channels for objects are exported even without keyframes or movement',
-		default = False
-	)
-
 
 	# ////////
 	
@@ -325,42 +220,7 @@ class CAP_FormatData_GLTF(PropertyGroup):
 		max = 120,
 	)
 
-	
-
-
-
-	
-	
-
-
-	# /////////////////////////////////
-	# RIGGING
-	
-	export_rest_position_armature: BoolProperty(
-		name = "Use Armature Rest Position",
-		description = "If enabled, armatures will be exported in the pose of their rest position",
-		default = True,
-	)
-
-	export_def_bones: BoolProperty(
-		name = 'Export Deformation Bones Only',
-		description = 'When on, only the deformation bones will be exported (and needed bones in the hierarchy)',
-		default = False
-	)
-
-	export_armature_object_remove: BoolProperty(
-		name = "Remove Armature Objects",
-		description = " Remove Armature objects from export if possible. If an Armature has multiple root bones, it will not be removed",
-		default = False,
-	)
-
-	export_hierarchy_flatten_bones: BoolProperty(
-		name = "Flatten Bone Hierarchy",
-		description = "Useful in case of a 'non decomposable transformation matrix'",
-		default = False,
-	)
-
-
+	# ////////
 
 	export_morph: BoolProperty(
 		name = 'Export Shape Keys',
@@ -369,27 +229,15 @@ class CAP_FormatData_GLTF(PropertyGroup):
 	)
 
 	export_morph_normal: BoolProperty(
-		name = 'Include Shape Key Normals',
+		name = 'Export Shape Key Normals',
 		description = 'Export vertex normals with shape keys',
 		default = True
 	)
 
 	export_morph_tangent: BoolProperty(
-		name = 'Include Shape Key Tangents',
+		name = 'Export Shape Key Tangents',
 		description = 'Export vertex tangents with shape keys',
 		default = True
-	)
-
-	export_try_sparse_sk: BoolProperty(
-		name = 'Use Sparse Accessors',
-		description = "If enabled, the exported file will reuse Shape Key data between multiple Shape Keys in order to reduce the file size.  This feature is highly model-dependant and may have little effect",
-		default = False
-	)
-
-	export_try_omit_sparse_sk: BoolProperty(
-		name = 'Omit Empty Sparce Accessors',
-		description = "Sparse Accessors are a GLTF feature that attempts to reuse Shape Key data in order to reduce the file size.  If enabled, any Sparse Accessors with an empty set of data will be stripped from the file to further reduce the file size",
-		default = False
 	)
 
 	# ////////
@@ -406,12 +254,12 @@ class CAP_FormatData_GLTF(PropertyGroup):
 		default = False
 	)
 
-	export_influence_nb: IntProperty(
-		name = "Bone Influence Count",
-		description = "How many joint vertex influences will be exported. Models may appear incorrectly in many viewers with value different to 4 or 8",
-		default = 4,
-		min = 1,
+	export_def_bones: BoolProperty(
+		name = 'Export Deformation Bones Only',
+		description = 'When on, only the deformation bones will be exported (and needed bones in the hierarchy)',
+		default = False
 	)
+	
 
 	# TODO: Missing some new animation properties
 
@@ -491,19 +339,18 @@ class CAP_FormatData_GLTF(PropertyGroup):
 			# CAPSULE
 			filepath=final_filename,
 			check_existing = False,
-			
 			use_selection  = True,
+
 			use_visible = False,
 			use_renderable = False,
 			use_active_collection = False,
 			use_active_scene = True,
-
-			# used to identify that the exporter is being called in code.
-			gltf_export_id = "Capsule 1.42", 
+			gltf_export_id = "Capsule", # used to identify that the exporter is being called in code.
 
 			# While this is active, Shape Keys cannot be exported.
 			export_apply = export_preset.apply_modifiers,
 			
+
 			# FILE
 			export_format = self.export_format,
 			export_copyright = self.export_copyright,
@@ -512,70 +359,50 @@ class CAP_FormatData_GLTF(PropertyGroup):
 
 			# SCENE
 			export_yup = self.export_y_up,
-			export_import_convert_lighting_mode = self.export_import_convert_lighting_mode,
 			export_cameras = self.export_cameras,
 			export_lights = self.export_lights,
-			export_gpu_instances = self.export_gpu_instances,
-
-			export_gn_mesh = self.export_gn_mesh,
-			# export_hierarchy_full_collections = self.export_hierarchy_full_collections,
-   			export_hierarchy_flatten_objs = self.export_hierarchy_flatten_objs,
 			
 
 			# MESH
 			export_texcoords = self.export_texcoords,
 			export_normals = self.export_normals,
 			export_tangents = self.export_tangents,
-			export_attributes = self.export_attributes,
+			export_colors = self.export_colors,
 			use_mesh_edges = self.use_mesh_edges,
 			use_mesh_vertices = self.use_mesh_vertices,
-			export_shared_accessors = self.export_shared_accessors,
 
 			export_materials = self.export_materials,
 			export_image_format = self.export_image_format,
-			export_jpeg_quality = self.export_image_quality,
-			export_image_quality = self.export_image_quality,
+			export_jpeg_quality = self.export_jpeg_quality,
 			export_texture_dir = self.export_texture_dir,
 			export_keep_originals = self.export_keep_originals,
-			export_image_webp_fallback = self.export_image_webp_fallback,
+
+			# TODO: Double-check if this has been removed before the release of 3.3.
+			# export_displacement = self.export_displacement,
 
 
-			# ANIMATION`
-   			export_animations = export_preset.export_animation,
-			export_animation_mode = self.export_animation_mode,
-			export_bake_animation = self.export_bake_animation,
-			# export_nla_strips = self.export_nla_strips,
+			# ANIMATION
+			
+			export_nla_strips = self.export_nla_strips,
 			export_nla_strips_merged_animation_name = self.export_nla_strips_merged_animation_name,
 
+			export_animations = export_preset.export_animation,
 			export_current_frame = self.export_current_frame,
 			export_frame_range = self.export_frame_range,
-			export_anim_slide_to_zero = self.export_anim_slide_to_zero,
-			export_negative_frame = self.export_negative_frame,
-			
 			export_anim_single_armature = self.export_anim_single_armature,
 			export_optimize_animation_size = self.export_optimize_animation_size,
 
 			export_force_sampling = self.export_force_sampling,
 			export_frame_step = self.export_frame_step,
 
-			export_reset_pose_bones = self.export_reset_pose_bones,
-			export_morph_reset_sk_data = self.export_morph_reset_sk_data,
-
-			# RIGGING
-			export_rest_position_armature = self.export_rest_position_armature,
-			export_def_bones = self.export_def_bones,
-			export_armature_object_remove = self.export_armature_object_remove,
-			export_hierarchy_flatten_bones = self.export_hierarchy_flatten_bones,
-
 			export_morph = self.export_morph,
 			export_morph_normal = self.export_morph_normal,
 			export_morph_tangent = self.export_morph_tangent,
-			export_try_sparse_sk = self.export_try_sparse_sk,
-			export_try_omit_sparse_sk = self.export_try_omit_sparse_sk,
 
 			export_skins = self.export_skins,
 			export_all_influences = self.export_all_influences,
-			export_influence_nb = self.export_influence_nb,
+			export_def_bones = self.export_def_bones,
+
 
 			# DRACO
 			export_draco_mesh_compression_enable = self.export_draco_mesh_compression_enable,
@@ -611,13 +438,12 @@ class CAP_FormatData_GLTF(PropertyGroup):
 		# area for revealed export options
 		export_options_area = export_tab_area.column(align = True)
 
-		export_options = export_options_area.column(align = True)
-		export_options.use_property_split = True
-		export_options.use_property_decorate = False
-		export_options.separator()
-
 		if cap_file.gltf_menu_options == 'File':
-
+			export_options = export_options_area.column(align = True)
+			export_options.use_property_split = True
+			export_options.use_property_decorate = False  # removes animation options
+			export_options.separator()
+			
 			export_options.prop(exportData, "export_format")
 			export_options.separator()
 			export_options.prop(exportData, "export_copyright")
@@ -628,45 +454,33 @@ class CAP_FormatData_GLTF(PropertyGroup):
 
 
 		if cap_file.gltf_menu_options == 'Scene':
+			export_options = export_options_area.column(align = True)
+			export_options.use_property_split = True
+			export_options.use_property_decorate = False  # removes animation options
+			export_options.separator()
 
 			export_options.prop(exportData, "export_y_up")
 			export_options.separator()
 			export_options.prop(exportData, "export_cameras")
 			export_options.prop(exportData, "export_lights")
-			export_options.prop(exportData, "export_gpu_instances")
-			export_options.separator()
-			export_options.prop(exportData, "export_gn_mesh")
-			export_options.prop(exportData, "export_hierarchy_flatten_objs")
-			# export_options.prop(exportData, "export_hierarchy_full_collections")
-			export_options.separator()	
-			export_options.separator()	
-			export_options.prop(exportData, "export_import_convert_lighting_mode")
-			export_options.separator()
 			export_options.separator()
 
 
 		elif cap_file.gltf_menu_options == 'Object':
+			export_options = export_options_area.column(align = True)
+			export_options.use_property_split = True
+			export_options.use_property_decorate = False  # removes animation options
+			export_options.separator()
 
-			# Disabled Animations Warning
-			if preset.export_animation == False:
-				export_options_warning = export_options.box()
-				export_options_warning_l = export_options_warning.column(align= True)
-				export_options_warning_l.label(text= "In Blender 4.1 Color Attributes will only be exported if used in the active material.")
-				export_options_warning_l.label(text= "The GLTF devs are fixing this for 4.2.")
-				export_options.separator()
-				export_options.separator()
-
-			mesh_options = export_options.column(align = True, heading = "Mesh Data")
+			mesh_options = export_options.column(align = True, heading = tr("Mesh Data"))
 			mesh_options.prop(exportData, "export_texcoords")
 			mesh_options.prop(exportData, "export_normals")
 			mesh_options.prop(exportData, "export_tangents")
-			mesh_options.prop(exportData, "export_attributes")
-
+			mesh_options.prop(exportData, "export_colors")
+			# mesh_options.prop(exportData, "export_displacement")
 			mesh_options.separator()
 			mesh_options.prop(exportData, "use_mesh_edges")
 			mesh_options.prop(exportData, "use_mesh_vertices")
-			mesh_options.separator()
-			mesh_options.prop(exportData, "export_shared_accessors")
 
 			mesh_options.separator()
 			mesh_options.separator()
@@ -682,18 +496,13 @@ class CAP_FormatData_GLTF(PropertyGroup):
 
 			mat_options.prop(exportData, "export_image_format")
 			mat_options.separator()
-			
-			compression_options = mat_options.column()
-			if exportData.export_image_format == 'AUTO' or exportData.export_image_format == 'NONE':
-				compression_options.active = False
-			compression_options.prop(exportData, "export_image_quality")
-			compression_options.separator()
 
-			compression_options = mat_options.column()
-			if exportData.export_image_format == 'NONE' or exportData.export_image_format == 'JPEG':
-				compression_options.active = False
-			compression_options.prop(exportData, "export_image_webp_fallback")
-			compression_options.separator()
+			jpeg_options = mat_options.column()
+			jpeg_options.active = True
+			if exportData.export_image_format != 'JPEG':
+				jpeg_options.active = False
+			jpeg_options.prop(exportData, "export_jpeg_quality")
+			jpeg_options.separator()
 
 			export_tex_options = mat_options.column()
 			if exportData.export_format == 'GLTF_SEPARATE':
@@ -707,12 +516,24 @@ class CAP_FormatData_GLTF(PropertyGroup):
 
 
 		elif cap_file.gltf_menu_options == 'Animation':
+			export_options = export_options_area.column(align = True)
+			export_options.use_property_split = True
+			export_options.use_property_decorate = False  # removes animation options
+			export_options.separator()
+			
+			# Shapekey warning
+			if preset.apply_modifiers == True:
+				export_options_warning = export_options.box()
+				export_options_warning_l = export_options_warning.row(align= True)
+				export_options_warning_l.label(text= tr("While Apply Modifiers is active, objects with Modifiers will NOT export Shape Keys"))
+				export_options.separator()
+				export_options.separator()
 			
 			# Disabled Animations Warning
 			if preset.export_animation == False:
 				export_options_warning = export_options.box()
 				export_options_warning_l = export_options_warning.row(align= True)
-				export_options_warning_l.label(text= "Export Animation is currently disabled in the General Export Options")
+				export_options_warning_l.label(text= tr("Export Animation is currently disabled in the General Export Options"))
 				export_options.separator()
 				export_options.separator()
 
@@ -720,90 +541,46 @@ class CAP_FormatData_GLTF(PropertyGroup):
 			animation_options = export_options.column(align = True)
 			animation_options.active = preset.export_animation
 
-			type_sub = animation_options.column(align = True)
-			type_sub.prop(exportData, "export_animation_mode")
-			type_sub.separator()
+			group_sub = animation_options.column(align = True, heading = tr("NLA Strip Options"))
+			group_sub.prop(exportData, "export_nla_strips")
+			group_sub.separator()
 
-			anim_mode = exportData.export_animation_mode
+			merged_sub = group_sub.column(align = True)
+			merged_sub.active = True
+			if exportData.export_nla_strips == True:
+				merged_sub.active = False
 
-			merged_sub = type_sub.column(align = True)
-			merged_sub.active = False
-			if anim_mode == 'ACTIVE_ACTIONS':
-				merged_sub.active = True
 			merged_sub.prop(exportData, "export_nla_strips_merged_animation_name")
-			merged_sub.separator()
-
-			action_sub = type_sub.column(align = True)
-			action_sub.active = False
-			if anim_mode == 'ACTIONS' or anim_mode == 'ACTIVE_ACTIONS':
-				action_sub.active = True
-			action_sub.prop(exportData, "export_bake_animation")
-
-			animation_options.separator()
-			animation_options.separator()
+			group_sub.separator()
+			group_sub.separator()
 			
-			generic_sub = animation_options.column(align = True, heading = "Animation Options")
+			generic_sub = animation_options.column(align = True, heading = tr("Animation Options"))
 			generic_sub.prop(exportData, "export_current_frame")
 			generic_sub.prop(exportData, "export_anim_single_armature")
 			generic_sub.prop(exportData, "export_frame_range")
-			generic_sub.separator()
-
-			generic_sub.prop(exportData, "export_reset_pose_bones")
-			generic_sub.prop(exportData, "export_morph_reset_sk_data")
-			generic_sub.separator()
-			generic_sub.prop(exportData, "export_anim_slide_to_zero")
-			generic_sub.separator()
-			generic_sub.separator()
-			generic_sub.prop(exportData, "export_negative_frame")
+			generic_sub.prop(exportData, "export_optimize_animation_size")
+			
+			
 			animation_options.separator()
 			animation_options.separator()
 
-			optimization_options = animation_options.column(align = True, heading = "Optimization")
-			optimization_options.prop(exportData, "export_optimize_animation_size")
-			optimization_options.prop(exportData, "export_optimize_animation_keep_anim_armature")
-			optimization_options.prop(exportData, "export_optimize_animation_keep_anim_object")
-			optimization_options.separator()
-			optimization_options.separator()
+			sample_row = animation_options.row(align = True, heading = tr("Force Sampling"))
+			sample_row.separator()
+			sample_sub = sample_row.row(align = True)
+			sample_sub.prop(exportData, "export_force_sampling", text = "")
 
-			sample_row = animation_options.column(align = True, heading = "Force Sampling")
-			sample_row.prop(exportData, "export_force_sampling", text = "Enable")
+			samplerate_sub = sample_sub.row(align = True)
+			samplerate_sub.active = exportData.export_force_sampling
+			samplerate_sub.prop(exportData, "export_frame_step", text = "")
 			sample_row.separator()
 
-			sample_sub = sample_row.column(align = True)
-			sample_sub.active = exportData.export_force_sampling 
-			sample_sub.prop(exportData, "export_frame_step")
-			
 			animation_options.separator()
 			animation_options.separator()
 
-			
-		
-		elif cap_file.gltf_menu_options == 'Rigging':
-
-			# Shapekey warning
-			if preset.apply_modifiers == True:
-				export_options_warning = export_options.box()
-				export_options_warning_l = export_options_warning.row(align= True)
-				export_options_warning_l.label(text= "While Apply Modifiers is active, objects with Modifiers will NOT export Shape Keys")
-				export_options.separator()
-				export_options.separator()
-
-			rigging_options = export_options.column(align = True)
-
-			armature_options = rigging_options.column(align = True, heading = "Armature Options")
-			armature_options.prop(exportData, "export_rest_position_armature")
-			armature_options.prop(exportData, "export_def_bones")
-			armature_options.prop(exportData, "export_armature_object_remove")
-			armature_options.prop(exportData, "export_hierarchy_flatten_bones")
-			armature_options.separator()
-			armature_options.separator()
-
-			shapekey_options = rigging_options.column(align = True, heading = "Shape Key Options")
-
-			# Shouldn't be disabled if a given export task doesn't have any object modifiers
-			# shapekey_options.active = False
-			# if preset.apply_modifiers == False:
-			# 	shapekey_options.active = True
+			shapekey_options = animation_options.column(align = True, heading = tr("Shape Key Options"))
+			shapekey_options.active = False
+			if preset.apply_modifiers == False:
+				shapekey_options.active = True
 
 			shapekey_options.prop(exportData, "export_morph")
 			shapekey_sub = shapekey_options.column(align = True)
@@ -811,41 +588,29 @@ class CAP_FormatData_GLTF(PropertyGroup):
 			
 			shapekey_sub.prop(exportData, "export_morph_normal")
 			shapekey_sub.prop(exportData, "export_morph_tangent")
-			shapekey_sub.separator()
-
-			shapekey_accessors = shapekey_sub.column(align = True)
-			shapekey_accessors.prop(exportData, 'export_try_sparse_sk')
-
-			shapekey_accessors_sub = shapekey_accessors.column(align = True)
-			if exportData.export_try_sparse_sk == False:
-				shapekey_accessors_sub.active = False
-			shapekey_accessors_sub.prop(exportData, 'export_try_omit_sparse_sk')
-
 			shapekey_options.separator()
 			shapekey_options.separator()
 
-			skinning_options = rigging_options.column(align = True, heading = "Skinning Options")
+			skinning_options = animation_options.column(align = True, heading = tr("Skinning Options"))
 			skinning_options.prop(exportData, "export_skins")
 			skinning_sub = skinning_options.column(align = True)
 			skinning_sub.active = exportData.export_skins
 			skinning_sub.prop(exportData, "export_all_influences")
-			skinning_sub.separator()
+			skinning_sub.prop(exportData, "export_def_bones")
 
-			influence_sub = skinning_options.column(align = True)
-			if exportData.export_all_influences == True:
-				influence_sub.active = False
-			influence_sub.prop(exportData, "export_influence_nb")
-
-			rigging_options.separator()
-			rigging_options.separator()
+			export_options.separator()
 		
 		elif cap_file.gltf_menu_options == 'Draco':
+			export_options = export_options_area.column(align = True)
+			export_options.use_property_split = True
+			export_options.use_property_decorate = False  # removes animation options
+			export_options.separator()
 
 			# Draco Warning
 			if exportData.export_draco_mesh_compression_enable == True:
 				export_options_warning = export_options.box()
 				export_options_warning_l = export_options_warning.row(align= True)
-				export_options_warning_l.label(text= "Draco is an extension and may not be supported by your target application")
+				export_options_warning_l.label(text= tr("Draco is an extension and may not be supported by your target application"))
 				export_options.separator()
 				export_options.separator()
 
@@ -854,15 +619,14 @@ class CAP_FormatData_GLTF(PropertyGroup):
 
 			draco_options = export_options.column(align = True)
 			draco_options.active = exportData.export_draco_mesh_compression_enable
-			draco_options.prop(exportData, "export_draco_mesh_compression_level", text = "Mesh Compression")
+			draco_options.prop(exportData, "export_draco_mesh_compression_level", text = tr("Mesh Compression"))
 			draco_options.separator()
-			draco_options.prop(exportData, "export_draco_position_quantization", text = "Position Quantization")
-			draco_options.prop(exportData, "export_draco_normal_quantization", text = "Normal Quantization")
-			draco_options.prop(exportData, "export_draco_texcoord_quantization", text = "UV Quantization")
-			draco_options.prop(exportData, "export_draco_color_quantization", text = "Color Quantization")
-			draco_options.prop(exportData, "export_draco_generic_quantization", text = "Other Quantization")
+			draco_options.prop(exportData, "export_draco_position_quantization", text = tr("Position Quantization"))
+			draco_options.prop(exportData, "export_draco_normal_quantization", text = tr("Normal Quantization"))
+			draco_options.prop(exportData, "export_draco_texcoord_quantization", text = tr("UV Quantization"))
+			draco_options.prop(exportData, "export_draco_color_quantization", text = tr("Color Quantization"))
+			draco_options.prop(exportData, "export_draco_generic_quantization", text = tr("Other Quantization"))
 
-			export_options.separator()
 			export_options.separator()
 		
 		# right padding
